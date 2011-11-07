@@ -29,6 +29,50 @@
  * simultaneously.
  *
  */
+#include <stdbool.h>
+
+#define MAX_DIVISORS 10000
+
+/**
+ * @brief Checks if an integer is a perfect number.
+ *
+ * Preconditions: 
+ *
+ * Postconditions: 
+ *
+ * @param n Number to test
+ * @return true if n is a perfect number, false otherwise
+ */
+bool is_perfect_number(unsigned int n);
+
 int main(int argc, char **argv) {
+	printf("Perfect numbers:\n");
+	for (unsigned int i = 1; i < 10000; i++) {
+		if (is_perfect_number(i) == true) {
+			printf("%d\n", i);
+		}
+	}
+	printf("\n");
+
 	return 0;
 }
+
+bool is_perfect_number(unsigned int n) {
+	unsigned int divisors[MAX_DIVISORS];
+	unsigned int n_divisors = 0;
+	unsigned int sum = 0;
+
+	for (unsigned int i = 1; i < n; i++) {
+		if ((n % i) == 0) {
+			// Is a divisor
+			divisors[n_divisors++] = i;
+		}
+	}
+
+	for (unsigned int i = 0; i < n_divisors; i++) {
+		sum += divisors[i];
+	}
+
+	return (sum == n);
+}
+
