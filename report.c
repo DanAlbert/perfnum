@@ -1,5 +1,5 @@
 /**
- * @file manage.c
+ * @file report.c
  * @author Dan Albert
  * @date Created 11/05/2011
  * @date Last updated 11/05/2011
@@ -24,10 +24,19 @@
  *
  * @section DESCRIPTION
  *
- * Maintains the results of compute. It also keeps track of the active compute processes,
- * so that it can signal them to terminate.
+ * Reports on the perfect numbers found, the number tested, and the processes currently
+ * computing. If invoked with the "-k" switch, it also is used to inform the manage
+ * process to shut down computation.
  *
  */
+#include <stdio.h>
+
 int main(int argc, char **argv) {
+	char c;
+	while (c != EOF) {
+		putchar(c);
+		c = getchar();
+	}
+
 	return 0;
 }

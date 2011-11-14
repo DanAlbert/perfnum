@@ -30,6 +30,7 @@
  *
  */
 #include <stdbool.h>
+#include <stdio.h>
 
 #define MAX_DIVISORS 10000
 
@@ -46,13 +47,20 @@
 bool is_perfect_number(unsigned int n);
 
 int main(int argc, char **argv) {
-	printf("Perfect numbers:\n");
-	for (unsigned int i = 1; i < 10000; i++) {
+	unsigned int start;
+	
+	if (argc < 2) {
+		printf("Starting point not specified.\n");
+		exit(1);
+	}
+
+	start = atoi(argv[1]);
+
+	for (unsigned int i = start; i < 10000; i++) {
 		if (is_perfect_number(i) == true) {
 			printf("%d\n", i);
 		}
 	}
-	printf("\n");
 
 	return 0;
 }
