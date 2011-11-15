@@ -32,7 +32,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+/// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
+
+/// The highest number to test
+#define TEST_LIMIT 10000
 
 /**
  * @brief Checks if an integer is a perfect number.
@@ -56,7 +60,7 @@ int main(int argc, char **argv) {
 
 	start = atoi(argv[1]);
 
-	for (unsigned int i = start; i < 10000; i++) {
+	for (unsigned int i = start; i <= TEST_LIMIT; i++) {
 		if (is_perfect_number(i) == true) {
 			printf("%d\n", i);
 		}

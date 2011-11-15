@@ -50,6 +50,12 @@
 #define READ 0
 #define WRITE 1
 
+#define ERROR_SPAWN_COMPUTE	1
+#define ERROR_SPAWN_REPORT	2
+
+int spawn_computes(pid_t pids[NPROCS], int fds[2]);
+int spawn_report(pid_t *pid, int fds[2]);
+
 int main(int argc, char **argv) {
 	pid_t computes[NPROCS];
 	pid_t report;
@@ -58,67 +64,13 @@ int main(int argc, char **argv) {
 	int body_count = 0;
 	int flags;
 
-	if (pipe(compute_pipe) == -1) {
-		perror("Unable to open compute pipe");
-		exit(1);
+	if (spawn_computes(computes, compute_pipe) == -1) {
+		exit(ERROR_SPAWN_COMPUTE);
 	}
 
-	if (pipe(report_pipe) == -1) {
-		perror("Unable to open report pipe");
-		exit(1);
+	if (spawn_report(&report, report_pipe) == -1) {
+		exit(ERROR_SPAWN_REPORT);
 	}
-
-	for (int i = 0; i < NPROCS; i++) {
-		pid_t pid = fork();
-		if (pid > 0) {
-			// Parent
-
-			computes[i] = pid;
-		} else if (pid == 0) {
-			// Child
-
-			// Duplicate write end of pipe to stdout
-			if (dup2(compute_pipe[WRITE], STDOUT_FILENO) == -1) {
-				perror("Could not duplicate file descriptor");
-				exit(1);
-			}
-
-			// Close read end of pipe
-			close(compute_pipe[READ]);
-			if (execl(COMPUTE_CMD, COMPUTE_CMD, START_AT_STR, NULL) == -1) {
-				perror("Unable to exec");
-				exit(1);
-			}
-		} else {
-			// Error
-			perror("Unable to spawn compute");
-		}
-	}
-
-	report = fork();
-	if (report > 0) {
-		close(report_pipe[READ]);
-	} else if (report == 0) {
-		if (dup2(report_pipe[READ], STDIN_FILENO) == -1) {
-			perror("Could not duplicate file descriptor");
-			exit(1);
-		}
-
-		close(report_pipe[WRITE]);
-
-		if (execl(REPORT_CMD, REPORT_CMD, NULL) == -1) {
-			perror("Unable to exec report");
-			exit(1);
-		}
-	} else {
-		perror("Unable to fork report");
-	}
-
-	if (flags = fcntl(compute_pipe[READ], F_GETFL, 0) == -1) {
-		flags = 0;
-	}
-	
-	fcntl(compute_pipe[READ], F_SETFL, flags | O_NONBLOCK);
 
 	while (body_count < NPROCS) {
 		pid_t pid;
@@ -142,7 +94,6 @@ int main(int argc, char **argv) {
 
 		chars_read = read(compute_pipe[READ], buf, PIPE_BUF);
 		if (chars_read == 0) {
-			printf("EOF\n");
 			break;
 		} else if (chars_read == -1) {
 			if (errno != EAGAIN) {
@@ -155,22 +106,91 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	// Now that all children have been spawned, close write end of pipe
-	close(compute_pipe[WRITE]);
-
-	// Close read end of pipe
+	// Clean up pipes
 	close(compute_pipe[READ]);
-
 	close(report_pipe[WRITE]);
 
+	// Wait for report to die
 	waitpid(report, NULL, 0);
 
-	while (body_count < NPROCS) {
-		if (wait(NULL) == -1) {
-			perror("Wait error");
+	return 0;
+}
+
+int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
+	int flags;
+
+	if (pipe(fds) == -1) {
+		perror("Unable to open compute pipe");
+		return -1;
+	}
+
+	for (int i = 0; i < NPROCS; i++) {
+		pid_t pid = fork();
+		if (pid > 0) {
+			// Parent
+
+			pids[i] = pid;
+		} else if (pid == 0) {
+			// Child
+
+			// Duplicate write end of pipe to stdout
+			if (dup2(fds[WRITE], STDOUT_FILENO) == -1) {
+				perror("Could not duplicate file descriptor");
+				return -1;
+			}
+
+			// Close read end of pipe
+			close(fds[READ]);
+			if (execl(COMPUTE_CMD, COMPUTE_CMD, START_AT_STR, NULL) == -1) {
+				perror("Unable to exec");
+				return -1;
+			}
 		} else {
-			body_count++;
+			// Error
+			perror("Unable to spawn compute");
 		}
+	}
+
+	// Now that all children have been spawned, close write end of pipe
+	close(fds[WRITE]);
+
+	if (flags = fcntl(fds[READ], F_GETFL, 0) == -1) {
+		flags = 0;
+	}
+	
+	if (fcntl(fds[READ], F_SETFL, flags | O_NONBLOCK) == -1) {
+		perror(NULL);
+		return -1;
+	}
+
+	return 0;
+}
+
+int spawn_report(pid_t *pid, int fds[2]) {
+	if (pipe(fds) == -1) {
+		perror("Unable to open report pipe");
+		return -1;
+	}
+
+	*pid = fork();
+
+	if (*pid > 0) {
+		close(fds[READ]);
+	} else if (*pid == 0) {
+		if (dup2(fds[READ], STDIN_FILENO) == -1) {
+			perror("Could not duplicate file descriptor");
+			return -1;
+		}
+
+		close(fds[WRITE]);
+
+		if (execl(REPORT_CMD, REPORT_CMD, NULL) == -1) {
+			perror("Unable to exec report");
+			return -1;
+		}
+	} else {
+		perror("Unable to fork report");
+		return -1;
 	}
 
 	return 0;
