@@ -32,7 +32,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 /// Path to compute program
@@ -50,26 +52,39 @@
 #define READ 0
 #define WRITE 1
 
-#define ERROR_SPAWN_COMPUTE	1
-#define ERROR_SPAWN_REPORT	2
-
-int spawn_computes(pid_t pids[NPROCS], int fds[2]);
+int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs);
 int spawn_report(pid_t *pid, int fds[2]);
 
+void usage(void);
+
 int main(int argc, char **argv) {
-	pid_t computes[NPROCS];
+	pid_t *computes;
 	pid_t report;
 	int compute_pipe[2];
 	int report_pipe[2];
 	int body_count = 0;
-	int flags;
+	int nprocs;
+	int limit;
 
-	if (spawn_computes(computes, compute_pipe) == -1) {
-		exit(ERROR_SPAWN_COMPUTE);
+	if (argc < 3) {
+		usage();
+	}
+
+	limit = atoi(argv[1]);
+	nprocs = atoi(argv[2]);
+
+	computes = (pid_t *)malloc(limit * sizeof(pid_t));
+	if (computes == NULL) {
+		perror("main");
+		exit(EXIT_FAILURE);
+	}
+
+	if (spawn_computes(computes, compute_pipe, limit, nprocs) == -1) {
+		exit(EXIT_FAILURE);
 	}
 
 	if (spawn_report(&report, report_pipe) == -1) {
-		exit(ERROR_SPAWN_REPORT);
+		exit(EXIT_FAILURE);
 	}
 
 	while (body_count < NPROCS) {
@@ -113,12 +128,12 @@ int main(int argc, char **argv) {
 	// Wait for report to die
 	waitpid(report, NULL, 0);
 
-	return 0;
+	exit(EXIT_SUCCESS);
 }
 
-int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
+int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs) {
 	int flags;
-	int numbers_per_proc = floor((double)TEST_LIMIT / (double)NPROCS);
+	int numbers_per_proc = floor((double)limit / (double)nprocs);
 	int end = 0;
 
 	if (pipe(fds) == -1) {
@@ -126,7 +141,7 @@ int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
 		return -1;
 	}
 
-	for (int i = 0; i < NPROCS; i++) {
+	for (int i = 0; i < nprocs; i++) {
 		pid_t pid;
 
 		char start_str[11];
@@ -139,7 +154,7 @@ int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
 		// Weight the extra numbers to the front (started first, fastest check)
 		if (i == 0)
 		{
-			end = numbers_per_proc + (TEST_LIMIT % NPROCS);
+			end = numbers_per_proc + (limit % nprocs);
 		} else {
 			end = start + numbers_per_proc - 1;
 		}
@@ -176,7 +191,7 @@ int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
 	// Now that all children have been spawned, close write end of pipe
 	close(fds[WRITE]);
 
-	if (flags = fcntl(fds[READ], F_GETFL, 0) == -1) {
+	if ((flags = fcntl(fds[READ], F_GETFL, 0)) == -1) {
 		flags = 0;
 	}
 	
@@ -217,3 +232,9 @@ int spawn_report(pid_t *pid, int fds[2]) {
 
 	return 0;
 }
+
+void usage(void) {
+	fprintf(stdout, "Usage: manage <limit> <nprocs>\n");
+	exit(EXIT_FAILURE);
+}
+

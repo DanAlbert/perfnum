@@ -21,6 +21,8 @@ CFLAGS =	$(INCLUDEDIRS) \
 			-std=gnu99 \
 			$(OPTIMIZATION) \
 
+LDFLAGS = -lm
+
 # Compiler flags to generate dependency files.
 GENDEPFLAGS = -MMD -MP -MF .dep/$(@F).d
 
@@ -35,7 +37,7 @@ all: $(EXE)
 $(EXE): $(OBJ)
 	@echo
 	@echo Linking: $@
-	$(CC) -o $@ $(ALL_CFLAGS) $^
+	$(CC) -o $@ $(ALL_CFLAGS) $(LDFLAGS) $^
 
 # Compile: create object files from C source files.
 $(OBJDIR)/%.o : %.c

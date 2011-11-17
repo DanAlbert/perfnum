@@ -32,7 +32,7 @@
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-	char c;
+	char c = getchar();
 	while (c != EOF) {
 		putchar(c);
 		c = getchar();

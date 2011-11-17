@@ -32,6 +32,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
@@ -52,7 +53,7 @@ int main(int argc, char **argv) {
 	unsigned int start;
 	unsigned int end;
 	
-	if (argc < 2) {
+	if (argc < 3) {
 		printf("Test limits not specified.\n");
 		exit(1);
 	}
