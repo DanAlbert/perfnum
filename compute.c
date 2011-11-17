@@ -29,14 +29,12 @@
  * simultaneously.
  *
  */
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
-
-/// The highest number to test
-#define TEST_LIMIT 10000
 
 /**
  * @brief Checks if an integer is a perfect number.
@@ -52,15 +50,17 @@ bool is_perfect_number(unsigned int n);
 
 int main(int argc, char **argv) {
 	unsigned int start;
+	unsigned int end;
 	
 	if (argc < 2) {
-		printf("Starting point not specified.\n");
+		printf("Test limits not specified.\n");
 		exit(1);
 	}
 
 	start = atoi(argv[1]);
+	end = atoi(argv[2]);
 
-	for (unsigned int i = start; i <= TEST_LIMIT; i++) {
+	for (unsigned int i = start; i <= end; i++) {
 		if (is_perfect_number(i) == true) {
 			printf("%d\n", i);
 		}

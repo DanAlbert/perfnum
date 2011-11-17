@@ -42,10 +42,10 @@
 #define REPORT_CMD "./report"
 
 /// Number of child computer processes to spawn
-#define NPROCS 8
+#define NPROCS 100
 
-/// Number to start testing values at (NOT FOR FINAL)
-#define START_AT_STR "1"
+/// The highest number to test
+#define TEST_LIMIT 34000000
 
 #define READ 0
 #define WRITE 1
@@ -118,6 +118,8 @@ int main(int argc, char **argv) {
 
 int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
 	int flags;
+	int numbers_per_proc = floor((double)TEST_LIMIT / (double)NPROCS);
+	int end = 0;
 
 	if (pipe(fds) == -1) {
 		perror("Unable to open compute pipe");
@@ -125,7 +127,27 @@ int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
 	}
 
 	for (int i = 0; i < NPROCS; i++) {
-		pid_t pid = fork();
+		pid_t pid;
+
+		char start_str[11];
+		char end_str[11];
+		int start;
+
+		// End is stored from rpevious loop
+		start = end + 1;
+
+		// Weight the extra numbers to the front (started first, fastest check)
+		if (i == 0)
+		{
+			end = numbers_per_proc + (TEST_LIMIT % NPROCS);
+		} else {
+			end = start + numbers_per_proc - 1;
+		}
+
+		snprintf(start_str, 11, "%d", start);
+		snprintf(end_str, 11, "%d", end);
+
+		pid = fork();
 		if (pid > 0) {
 			// Parent
 
@@ -141,7 +163,7 @@ int spawn_computes(pid_t pids[NPROCS], int fds[2]) {
 
 			// Close read end of pipe
 			close(fds[READ]);
-			if (execl(COMPUTE_CMD, COMPUTE_CMD, START_AT_STR, NULL) == -1) {
+			if (execl(COMPUTE_CMD, COMPUTE_CMD, start_str, end_str, NULL) == -1) {
 				perror("Unable to exec");
 				return -1;
 			}
