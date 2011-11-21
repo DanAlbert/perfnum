@@ -7,8 +7,8 @@ REMOVEDIR = rm -rf
 
 SRC =	compute.c \
 
-DEBUG = -g
-OPTIMIZATION = -O3
+DEBUG = -ggdb
+OPTIMIZATION = 
 INCLUDEDIRS = 
 OBJDIR = obj
 
@@ -20,6 +20,7 @@ CFLAGS =	$(INCLUDEDIRS) \
 			-Wstrict-prototypes \
 			-std=gnu99 \
 			$(OPTIMIZATION) \
+			$(DEBUG) \
 
 # Compiler flags to generate dependency files.
 GENDEPFLAGS = -MMD -MP -MF .dep/$(@F).d

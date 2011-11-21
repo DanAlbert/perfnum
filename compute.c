@@ -111,8 +111,7 @@ bool is_perfect_number(unsigned int n) {
 }
 
 void quit(int sig) {
-	putchar('\x7f');
-	fprintf(stderr, "Closing\n");
+	fprintf(stderr, "\rClosing\n");
 	close(STDOUT_FILENO);
 	exit(sig);
 }
