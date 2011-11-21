@@ -30,9 +30,12 @@
  *
  */
 #include <limits.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
@@ -49,10 +52,28 @@
  */
 bool is_perfect_number(unsigned int n);
 
+void quit(int sig);
+
 int main(int argc, char **argv) {
+	struct sigaction sigact;
 	unsigned int start;
 	unsigned int end;
 	
+	memset(&sigact, 0, sizeof(struct sigaction));
+	sigact.sa_handler = quit;
+
+	if (sigaction(SIGQUIT, &sigact, NULL) == -1) {
+		perror("Could not set SIGQUIT");
+	}
+
+	if (sigaction(SIGHUP, &sigact, NULL) == -1) {
+		perror("Could not set SIGHUP");
+	}
+
+	if (sigaction(SIGINT, &sigact, NULL) == -1) {
+		perror("Could not set SIGINT");
+	}
+
 	if (argc < 3) {
 		printf("Test limits not specified.\n");
 		exit(1);
@@ -87,5 +108,12 @@ bool is_perfect_number(unsigned int n) {
 	}
 
 	return (sum == n);
+}
+
+void quit(int sig) {
+	putchar('\x7f');
+	fprintf(stderr, "Closing\n");
+	close(STDOUT_FILENO);
+	exit(sig);
 }
 
