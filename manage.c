@@ -40,6 +40,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "shmem.h"
 
 /// Path to compute program
 #define COMPUTE_CMD "./compute"
@@ -56,24 +57,8 @@
 /// Number of arguments required for sockets method
 #define SOCK_ARGC 2
 
-/// Name of shared memory object
-#define SHMEM_PATH "albertd"
-
-/// Maximum number of perfect numbers to store in shared memory
-#define NPERFNUMS 20
-
-/// Maximum number of processes to track in shared memory
-#define NPROCS 20
-
 #define READ 0
 #define WRITE 1
-
-struct process {
-	pid_t pid;
-	int found;
-	int tested;
-	int untested;
-};
 
 struct pipe_res {
 	pid_t *compute_pids;
@@ -82,14 +67,6 @@ struct pipe_res {
 	int report_pipe[2];
 	int nprocs;
 	int limit;
-};
-
-struct shmem_res {
-	void *addr;
-	int *limit;
-	uint8_t *bitmap;
-	int *perfect_numbers;
-	struct process *processes;
 };
 
 struct sock_res {
@@ -125,7 +102,7 @@ int main(int argc, char **argv) {
 		usage();
 	}
 
-	mode = *argv[1]; // Only need the first character
+	mode = argv[1][0]; // Only need the first character
 
 	switch (mode) {
 	case 'p':
@@ -143,8 +120,9 @@ int main(int argc, char **argv) {
 		}
 
 		// TODO: This will run immediately, destroying the shmem
-		shmem_report(&shmem_res);
-		shmem_cleanup(&shmem_res);
+		// Just skip it for now. Make a mess of shmem
+		//shmem_report(&shmem_res);
+		//shmem_cleanup(&shmem_res);
 		break;
 	case 's':
 		// Socket stuff
@@ -348,7 +326,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 
 			// Close read end of pipe
 			close(fds[READ]);
-			if (execl(COMPUTE_CMD, COMPUTE_CMD, start_str, end_str, NULL) == -1) {
+			if (execl(COMPUTE_CMD, COMPUTE_CMD, "p", start_str, end_str, NULL) == -1) {
 				perror("Unable to exec");
 				return -1;
 			}
@@ -412,18 +390,18 @@ void *shmem_mount(char *path, int object_size) {
     /* create and resize it */
     shmem_fd = shm_open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if (shmem_fd == -1){
-        perror("failed to open shared memory object\n");
+        perror("failed to open shared memory object");
         exit(EXIT_FAILURE);
     }
     /* resize it to something reasonable */
     if (ftruncate(shmem_fd, object_size) == -1){
-        perror("failed to resize shared memory object\n");
+        perror("failed to resize shared memory object");
         exit(EXIT_FAILURE);
     }
 
     addr = mmap(NULL, object_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0);
     if (addr == MAP_FAILED){
-        fprintf(stdout, "failed to map shared memory object\n");
+        fprintf(stderr, "failed to map shared memory object\n");
         exit(EXIT_FAILURE);
     }
 
