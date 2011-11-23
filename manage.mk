@@ -21,7 +21,8 @@ CFLAGS =	$(INCLUDEDIRS) \
 			-std=gnu99 \
 			$(OPTIMIZATION) \
 
-LDFLAGS = -lm
+LDFLAGS =	-lm \
+			-lrt \
 
 # Compiler flags to generate dependency files.
 GENDEPFLAGS = -MMD -MP -MF .dep/$(@F).d

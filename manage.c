@@ -28,11 +28,15 @@
  * so that it can signal them to terminate.
  *
  */
+#include <sys/mman.h>
 #include <sys/wait.h>
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
-#include <math.h>
+#include <limits.h> // For PIPE_BUF
+#include <math.h> // For floor()
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -43,71 +47,217 @@
 /// Path to compute program
 #define REPORT_CMD "./report"
 
-/// Number of child computer processes to spawn
-#define NPROCS 100
+/// Number of arguments required for pipe method
+#define PIPE_ARGC 4
 
-/// The highest number to test
-#define TEST_LIMIT 34000000
+/// Number of arguments required for shared memory method
+#define SHMEM_ARGC 3
+
+/// Number of arguments required for sockets method
+#define SOCK_ARGC 2
+
+/// Name of shared memory object
+#define SHMEM_PATH "albertd"
+
+/// Maximum number of perfect numbers to store in shared memory
+#define NPERFNUMS 20
+
+/// Maximum number of processes to track in shared memory
+#define NPROCS 20
 
 #define READ 0
 #define WRITE 1
 
-int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs);
+struct process {
+	pid_t pid;
+	int found;
+	int tested;
+	int untested;
+};
+
+struct pipe_res {
+	pid_t *compute_pids;
+	pid_t report_pid;
+	int compute_pipe[2];
+	int report_pipe[2];
+	int nprocs;
+	int limit;
+};
+
+struct shmem_res {
+	void *addr;
+	int *limit;
+	uint8_t *bitmap;
+	int *perfect_numbers;
+	struct process *processes;
+};
+
+struct sock_res {
+	int listen;
+};
+
+bool pipe_init(int argc, char **argv, struct pipe_res *res);
+bool shmem_init(int argc, char **argv, struct shmem_res *res);
+bool sock_init(int argc, char **argv, struct sock_res *res);
+
+void pipe_report(struct pipe_res *res);
+void shmem_report(struct shmem_res *res);
+void sock_report(struct sock_res *res);
+
+void pipe_cleanup(struct pipe_res *res);
+void shmem_cleanup(struct shmem_res *res);
+void sock_cleanup(struct sock_res *res);
+
+int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
 int spawn_report(pid_t *pid, int fds[2]);
+
+void *shmem_mount(char *path, int object_size);
 
 void usage(void);
 
 int main(int argc, char **argv) {
-	pid_t *computes;
-	pid_t report;
-	int compute_pipe[2];
-	int report_pipe[2];
-	int body_count = 0;
-	int nprocs;
-	int limit;
+	struct pipe_res pipe_res;
+	struct shmem_res shmem_res;
+	struct sock_res sock_res;
+	char mode;
 
-	if (argc < 3) {
+	if (argc < 2) {
 		usage();
 	}
 
-	limit = atoi(argv[1]);
-	nprocs = atoi(argv[2]);
+	mode = *argv[1]; // Only need the first character
 
-	computes = (pid_t *)malloc(limit * sizeof(pid_t));
-	if (computes == NULL) {
-		perror("main");
-		exit(EXIT_FAILURE);
+	switch (mode) {
+	case 'p':
+		// Pipe stuff
+		if (pipe_init(argc, argv, &pipe_res) == false) {
+			exit(EXIT_FAILURE);
+		}
+		pipe_report(&pipe_res);
+		pipe_cleanup(&pipe_res);
+		break;
+	case 'm':
+		// Shmem stuff
+		if (shmem_init(argc, argv, &shmem_res) == false) {
+			exit(EXIT_FAILURE);
+		}
+
+		// TODO: This will run immediately, destroying the shmem
+		shmem_report(&shmem_res);
+		shmem_cleanup(&shmem_res);
+		break;
+	case 's':
+		// Socket stuff
+		if (sock_init(argc, argv, &sock_res) == false) {
+			exit(EXIT_FAILURE);
+		}
+		sock_report(&sock_res);
+		sock_cleanup(&sock_res);
+		break;
+	default:
+		usage();
+		break;
 	}
 
-	if (spawn_computes(computes, compute_pipe, limit, nprocs) == -1) {
-		exit(EXIT_FAILURE);
+	exit(EXIT_SUCCESS);
+}
+
+bool pipe_init(int argc, char **argv, struct pipe_res *res) {
+	assert(res != NULL);
+
+	if (argc < PIPE_ARGC) {
+		usage();
 	}
 
-	if (spawn_report(&report, report_pipe) == -1) {
-		exit(EXIT_FAILURE);
+	res->limit = atoi(argv[2]);
+	res->nprocs = atoi(argv[3]);
+
+	if (spawn_computes(
+			&res->compute_pids,
+			res->compute_pipe,
+			res->limit,
+			res->nprocs) == -1) {
+		return false;
 	}
 
-	while (body_count < NPROCS) {
-		pid_t pid;
-		int chars_read;
-		char buf[PIPE_BUF];
+	if (spawn_report(&res->report_pid, res->report_pipe) == -1) {
+		return false;
+	}
 
+	return true;
+}
+
+bool shmem_init(int argc, char **argv, struct shmem_res *res) {
+	int total_size;
+	int bitmap_size;
+	int perfnums_size;
+	int processes_size;
+	int limit;
+
+	assert(res != NULL);
+
+	if (argc < SHMEM_ARGC) {
+		usage();
+	}
+
+	limit = atoi(argv[2]);
+
+	bitmap_size = limit / 8 + 1;
+	perfnums_size = NPERFNUMS * sizeof(int);
+	processes_size = NPROCS * sizeof(struct process);
+	total_size = sizeof(int) + bitmap_size + perfnums_size + processes_size;
+
+	if (shm_unlink(SHMEM_PATH) == -1) {
+		if (errno != ENOENT) {
+			perror("Could not unlink shared memory object");
+			return false;
+		}
+	}
+	res->addr = shmem_mount(SHMEM_PATH, total_size);
+	res->limit = res->addr;
+	res->bitmap = res->limit + 1; // limit is a single integer, so bitmap is one int past
+	res->perfect_numbers = res->bitmap + bitmap_size;
+	res->processes = res->perfect_numbers + NPERFNUMS;
+
+	*res->limit = limit; // Set the limit in shared memory so other processes know
+
+	return true;
+}
+
+bool sock_init(int argc, char **argv, struct sock_res *res) {
+	if (argc < SOCK_ARGC) {
+		usage();
+	}
+
+	printf("sockets unimplemented\n");
+	return false;
+}
+
+void pipe_report(struct pipe_res *res) {
+	char buf[PIPE_BUF];
+	pid_t pid;
+	int body_count = 0;
+	int chars_read;
+
+	assert(res != NULL);
+
+	while (body_count < res->nprocs) {
 		do {
 			pid = waitpid(-1, NULL, WNOHANG);
-			if (pid == report) {
+			if (pid == res->report_pid) {
 				// report exited unexpectedly
-				printf("report exited unexcpectedly\n");
+				printf("report exited unexpectedly\n");
 			} else if (pid == 0) {
 				// Nothing has exited
 			} else if (pid == -1) {
-				perror(NULL);
+				perror("manage");
 			} else {
 				// Zombie neutralized
 				body_count++;
 			}
-		} while ((pid > 0) && (body_count < NPROCS));
+		} while ((pid > 0) && (body_count < res->nprocs));
 
-		chars_read = read(compute_pipe[READ], buf, PIPE_BUF);
+		chars_read = read(res->compute_pipe[READ], buf, PIPE_BUF);
 		if (chars_read == 0) {
 			break;
 		} else if (chars_read == -1) {
@@ -115,26 +265,47 @@ int main(int argc, char **argv) {
 				perror("FUBAR");
 			}
 		}
-		
+
 		if (chars_read > 0) {
-			write(report_pipe[WRITE], buf, chars_read);
+			write(res->report_pipe[WRITE], buf, chars_read);
 		}
 	}
-
-	// Clean up pipes
-	close(compute_pipe[READ]);
-	close(report_pipe[WRITE]);
-
-	// Wait for report to die
-	waitpid(report, NULL, 0);
-
-	exit(EXIT_SUCCESS);
 }
 
-int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs) {
+void shmem_report(struct shmem_res *res) {
+}
+
+void pipe_cleanup(struct pipe_res *res) {
+	assert(res != NULL);
+
+	// Clean up pipes
+	close(res->compute_pipe[READ]);
+	close(res->report_pipe[WRITE]);
+
+	// Wait for report to die
+	waitpid(res->report_pid, NULL, 0);
+
+	free(res->compute_pids);
+}
+
+void shmem_cleanup(struct shmem_res *res) {
+	if (shm_unlink(SHMEM_PATH) == -1) {
+		perror("Could not unlink shared memory object");
+	}
+}
+
+int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	int flags;
 	int numbers_per_proc = floor((double)limit / (double)nprocs);
 	int end = 0;
+
+	assert(pids != NULL);
+
+	*pids = (pid_t *)malloc(limit * sizeof(pid_t));
+	if (*pids == NULL) {
+		perror("main");
+		exit(EXIT_FAILURE);
+	}
 
 	if (pipe(fds) == -1) {
 		perror("Unable to open compute pipe");
@@ -148,7 +319,7 @@ int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs) {
 		char end_str[11];
 		int start;
 
-		// End is stored from rpevious loop
+		// End is stored from previous loop
 		start = end + 1;
 
 		// Weight the extra numbers to the front (started first, fastest check)
@@ -165,8 +336,7 @@ int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs) {
 		pid = fork();
 		if (pid > 0) {
 			// Parent
-
-			pids[i] = pid;
+			(*pids)[i] = pid;
 		} else if (pid == 0) {
 			// Child
 
@@ -196,7 +366,7 @@ int spawn_computes(pid_t *pids, int fds[2], int limit, int nprocs) {
 	}
 	
 	if (fcntl(fds[READ], F_SETFL, flags | O_NONBLOCK) == -1) {
-		perror(NULL);
+		perror("manage: fcntl");
 		return -1;
 	}
 
@@ -208,6 +378,8 @@ int spawn_report(pid_t *pid, int fds[2]) {
 		perror("Unable to open report pipe");
 		return -1;
 	}
+
+	assert(pid != NULL);
 
 	*pid = fork();
 
@@ -233,8 +405,49 @@ int spawn_report(pid_t *pid, int fds[2]) {
 	return 0;
 }
 
-void usage(void) {
-	fprintf(stdout, "Usage: manage <limit> <nprocs>\n");
-	exit(EXIT_FAILURE);
+void *shmem_mount(char *path, int object_size) {
+    int shmem_fd;
+    void *addr;
+
+    /* create and resize it */
+    shmem_fd = shm_open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    if (shmem_fd == -1){
+        perror("failed to open shared memory object\n");
+        exit(EXIT_FAILURE);
+    }
+    /* resize it to something reasonable */
+    if (ftruncate(shmem_fd, object_size) == -1){
+        perror("failed to resize shared memory object\n");
+        exit(EXIT_FAILURE);
+    }
+
+    addr = mmap(NULL, object_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0);
+    if (addr == MAP_FAILED){
+        fprintf(stdout, "failed to map shared memory object\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return addr;
 }
 
+void usage(void) {
+	fprintf(stdout, "Usage: manage [mps] <limit> <nprocs>\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "Modes:\n");
+	fprintf(stdout, "    m - shared memory\n");
+	fprintf(stdout, "        usage: manage m <limit>\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "        limit:      largest number to test\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "    p - pipes\n");
+	fprintf(stdout, "        usage: manage p <limit> <nprocs>\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "        limit:      largest number to test\n");
+	fprintf(stdout, "        nprocs:     number of compute processes to spawn\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "    s - sockets\n");
+	fprintf(stdout, "        usage: manage s <sock args>\n");
+	fprintf(stdout, "\n");
+
+	exit(EXIT_FAILURE);
+}

@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
 	if (argc < 3) {
 		printf("Test limits not specified.\n");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 
 	start = atoi(argv[1]);
