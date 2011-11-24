@@ -24,11 +24,15 @@
  *
  * @section DESCRIPTION
  *
- * Defines structures for use with the shared memory method.
+ * Defines structures, constants and functions for use with the shared memory method.
  *
  */
 #ifndef SHMEM_H
 #define SHMEM_H
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <unistd.h>
 
 /// Name of shared memory object
 #define SHMEM_PATH "albertd"
@@ -53,5 +57,7 @@ struct shmem_res {
 	int *perfect_numbers;
 	struct process *processes;
 };
+
+bool shmem_load(struct shmem_res *res);
 
 #endif // SHMEM_H

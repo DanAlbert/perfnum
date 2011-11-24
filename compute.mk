@@ -6,6 +6,7 @@ REMOVE = rm -f
 REMOVEDIR = rm -rf
 
 SRC =	compute.c \
+		shmem.c \
 
 DEBUG = -ggdb
 OPTIMIZATION = 

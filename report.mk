@@ -6,6 +6,7 @@ REMOVE = rm -f
 REMOVEDIR = rm -rf
 
 SRC =	report.c \
+		shmem.c \
 
 DEBUG = -g
 OPTIMIZATION = -O3
