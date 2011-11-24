@@ -31,6 +31,7 @@
  */
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <assert.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -40,6 +41,15 @@
 #include <string.h>
 #include <unistd.h>
 #include "shmem.h"
+
+/// Macro to get the value of a specific bit
+#define BIT(byte, bit) ((byte >> bit) & 1)
+
+/// Macro to set a specific bit
+#define SET_BIT(byte, bit) (byte |= (1 << bit))
+
+/// Macro to clear a specific bit
+#define CLR_BIT(byte, bit) (byte &= ~(1 << bit))
 
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
@@ -59,9 +69,11 @@
  */
 bool is_perfect_number(unsigned int n);
 
-bool shmem_init(struct shmem_res *res);
+int next_test(struct shmem_res *res);
 
-bool shmem_loop(struct shmem_res *res);
+bool shmem_init(struct shmem_res *res);
+void shmem_loop(struct shmem_res *res);
+void shmem_report(struct shmem_res *res, int n);
 
 void pipe_loop(int start, int end);
 
@@ -121,7 +133,6 @@ int main(int argc, char **argv) {
 		if (shmem_init(&res) == false) {
 			exit(EXIT_FAILURE);
 		}
-		printf("shmem successful\n");
 		shmem_loop(&res);
 		break;
 	case 'p':
@@ -157,6 +168,34 @@ bool is_perfect_number(unsigned int n) {
 	return (sum == n);
 }
 
+int next_test(struct shmem_res *res) {
+	int test;
+
+	assert(res != NULL);
+
+	// Loop over each byte in the bitmap
+	// Will actually test until the end of the byte if manage was given a limit that was
+	// not a power of two
+	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
+		for (int i = 0; i < 8; i++) {
+			if (BIT(*addr, i) == 0) {
+				// Claim this number for testing
+				SET_BIT(*addr, i);
+
+				test = ((addr - res->bitmap) * 8) + i + 1;
+
+				// Technically not the start of the bitmap, but it will speed up the
+				// search for the next number to test
+				//res->bitmap = addr + 1;
+
+				return test;
+			}
+		}
+	}
+
+	return -1;
+}
+
 bool shmem_init(struct shmem_res *res) {
     int shmem_fd;
     int bitmap_size;
@@ -165,6 +204,8 @@ bool shmem_init(struct shmem_res *res) {
     int total_size;
     int limit;
     void *addr;
+
+    assert(res != NULL);
 
     /* create and resize it */
     shmem_fd = shm_open(SHMEM_PATH, O_RDWR, S_IRUSR | S_IWUSR);
@@ -206,16 +247,42 @@ bool shmem_init(struct shmem_res *res) {
 	return true;
 }
 
-bool shmem_loop(struct shmem_res *res) {
-	return false;
+void shmem_loop(struct shmem_res *res) {
+	int test;
+
+	assert(res != NULL);
+
+	test = next_test(res);
+	while (test != -1) {
+		if (is_perfect_number(test) == true) {
+			shmem_report(res, test);
+		}
+
+		test = next_test(res);
+	}
+}
+
+void shmem_report(struct shmem_res *res, int n) {
+	assert(res != NULL);
+
+	for (int i = 0; i < NPERFNUMS; i++) {
+		if (res->perfect_numbers[i] == 0) {
+			// Open slot, use it
+			res->perfect_numbers[i] = n;
+			return;
+		}
+	}
 }
 
 void pipe_loop(int start, int end) {
-	for (unsigned int i = start; i <= end; i++) {
-			if (is_perfect_number(i) == true) {
-				pipe_report(i);
-			}
+	assert(start > 0);
+	assert(end > start);
+
+	for (int i = start; i <= end; i++) {
+		if (is_perfect_number(i) == true) {
+			pipe_report(i);
 		}
+	}
 }
 
 void pipe_report(int n) {

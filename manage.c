@@ -371,7 +371,7 @@ int spawn_report(pid_t *pid, int fds[2]) {
 
 		close(fds[WRITE]);
 
-		if (execl(REPORT_CMD, REPORT_CMD, NULL) == -1) {
+		if (execl(REPORT_CMD, REPORT_CMD, "p", NULL) == -1) {
 			perror("Unable to exec report");
 			return -1;
 		}
