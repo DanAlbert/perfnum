@@ -90,6 +90,8 @@ int spawn_report(pid_t *pid, int fds[2]);
 
 void *shmem_mount(char *path, int object_size);
 
+bool all_tested(struct shmem_res *res);
+
 void usage(void);
 
 int main(int argc, char **argv) {
@@ -119,10 +121,11 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 
-		// TODO: This will run immediately, destroying the shmem
-		// Just skip it for now. Make a mess of shmem
-		//shmem_report(&shmem_res);
-		//shmem_cleanup(&shmem_res);
+		while (all_tested(&shmem_res) == false) {
+			sleep(1);
+		}
+
+		shmem_cleanup(&shmem_res);
 		break;
 	case 's':
 		// Socket stuff
@@ -183,7 +186,7 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	bitmap_size = limit / 8 + 1;
 	perfnums_size = NPERFNUMS * sizeof(int);
 	processes_size = NPROCS * sizeof(struct process);
-	total_size = sizeof(int) + bitmap_size + perfnums_size + processes_size;
+	total_size = sizeof(int) + (2 * sizeof(sem_t)) + bitmap_size + perfnums_size + processes_size;
 
 	if (shm_unlink(SHMEM_PATH) == -1) {
 		if (errno != ENOENT) {
@@ -191,15 +194,52 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 			return false;
 		}
 	}
+
 	res->addr = shmem_mount(SHMEM_PATH, total_size);
 	res->limit = res->addr;
-	res->bitmap = res->limit + 1; // limit is a single integer, so bitmap is one int past
-	res->perfect_numbers = res->bitmap + bitmap_size;
+	res->bitmap_sem = res->limit + 1;
+	res->bitmap = res->bitmap_sem + 1; // limit is a single integer, so bitmap is one int past
+	res->perfect_numbers_sem = res->bitmap + bitmap_size;
+	res->perfect_numbers = res->perfect_numbers_sem + 1;
 	res->processes = res->perfect_numbers + NPERFNUMS;
 
 	*res->limit = limit; // Set the limit in shared memory so other processes know
 
+	if (sem_init(res->bitmap_sem, 1, 1) == -1) {
+		perror("Could not initialize semaphore");
+		return false;
+	}
+
+	if (sem_init(res->perfect_numbers_sem, 1, 1) == -1) {
+		perror("Could not initialize semaphore");
+		return false;
+	}
+
 	return true;
+}
+
+void shmem_cleanup(struct shmem_res *res) {
+	while (sem_destroy(res->bitmap_sem) == -1) {
+		if (errno == EINVAL) {
+			break;
+		}
+
+		// Else something is currently blocking on the semaphore, keep up the attack
+	}
+
+	while (sem_destroy(res->perfect_numbers_sem) == -1) {
+		if (errno == EINVAL) {
+			break;
+		}
+
+		// Else something is currently blocking on the semaphore, keep up the attack
+	}
+
+	if (shm_unlink(SHMEM_PATH) == -1) {
+		if (errno != ENOENT) {
+			perror("Could not unlink shared memory object");
+		}
+	}
 }
 
 bool sock_init(int argc, char **argv, struct sock_res *res) {
@@ -264,12 +304,6 @@ void pipe_cleanup(struct pipe_res *res) {
 	waitpid(res->report_pid, NULL, 0);
 
 	free(res->compute_pids);
-}
-
-void shmem_cleanup(struct shmem_res *res) {
-	if (shm_unlink(SHMEM_PATH) == -1) {
-		perror("Could not unlink shared memory object");
-	}
 }
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
@@ -406,6 +440,23 @@ void *shmem_mount(char *path, int object_size) {
     }
 
     return addr;
+}
+
+bool all_tested(struct shmem_res *res) {
+	assert(res != NULL);
+
+	// Loop over each byte in the bitmap
+	// Will actually test until the end of the byte if manage was given a limit that was
+	// not a power of two
+	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
+		for (int i = 0; i < 8; i++) {
+			if (BIT(*addr, i) == 0) {
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 void usage(void) {

@@ -30,9 +30,19 @@
 #ifndef SHMEM_H
 #define SHMEM_H
 
+#include <semaphore.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
+
+/// Macro to get the value of a specific bit
+#define BIT(byte, bit) ((byte >> bit) & 1)
+
+/// Macro to set a specific bit
+#define SET_BIT(byte, bit) (byte |= (1 << bit))
+
+/// Macro to clear a specific bit
+#define CLR_BIT(byte, bit) (byte &= ~(1 << bit))
 
 /// Name of shared memory object
 #define SHMEM_PATH "albertd"
@@ -53,7 +63,9 @@ struct process {
 struct shmem_res {
 	void *addr;
 	int *limit;
+	sem_t *bitmap_sem;
 	uint8_t *bitmap;
+	sem_t *perfect_numbers_sem;
 	int *perfect_numbers;
 	struct process *processes;
 };

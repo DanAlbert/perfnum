@@ -59,7 +59,7 @@ bool shmem_load(struct shmem_res *res) {
 	bitmap_size = limit / 8 + 1;
 	perfnums_size = NPERFNUMS * sizeof(int);
 	processes_size = NPROCS * sizeof(struct process);
-	total_size = sizeof(int) + bitmap_size + perfnums_size + processes_size;
+	total_size = sizeof(int) + (2 * sizeof(sem_t)) + bitmap_size + perfnums_size + processes_size;
 
 	// Check that the size of the shared memory object is the correct size
 	if (total_size != lseek(shmem_fd, 0, SEEK_END)) {
@@ -75,10 +75,12 @@ bool shmem_load(struct shmem_res *res) {
         return false;
     }
 
-    res->addr = addr;
+	res->addr = addr;
 	res->limit = res->addr;
-	res->bitmap = res->limit + 1; // limit is a single integer, so bitmap is one int past
-	res->perfect_numbers = res->bitmap + bitmap_size;
+	res->bitmap_sem = res->limit + 1;
+	res->bitmap = res->bitmap_sem + 1; // limit is a single integer, so bitmap is one int past
+	res->perfect_numbers_sem = res->bitmap + bitmap_size;
+	res->perfect_numbers = res->perfect_numbers_sem + 1;
 	res->processes = res->perfect_numbers + NPERFNUMS;
 
 	return true;

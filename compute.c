@@ -30,21 +30,13 @@
  *
  */
 #include <assert.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include "shmem.h"
-
-/// Macro to get the value of a specific bit
-#define BIT(byte, bit) ((byte >> bit) & 1)
-
-/// Macro to set a specific bit
-#define SET_BIT(byte, bit) (byte |= (1 << bit))
-
-/// Macro to clear a specific bit
-#define CLR_BIT(byte, bit) (byte &= ~(1 << bit))
 
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
@@ -173,16 +165,37 @@ int next_test(struct shmem_res *res) {
 	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
 		for (int i = 0; i < 8; i++) {
 			if (BIT(*addr, i) == 0) {
-				// Claim this number for testing
-				SET_BIT(*addr, i);
 
-				test = ((addr - res->bitmap) * 8) + i + 1;
+				while (sem_wait(res->bitmap_sem) != 0) {
+					if ((errno == EDEADLK) || (errno == EINVAL)) {
+						perror("Could not lock semaphore");
+						return -1;
+					}
 
-				// Technically not the start of the bitmap, but it will speed up the
-				// search for the next number to test
-				//res->bitmap = addr + 1;
+					// Else we received EAGAIN or EINTR and should wait again
+				}
 
-				return test;
+				// Check to make sure the process that had the semaphore locked didn't
+				// claim this number
+				if (BIT(*addr, i) == 0) {
+					// Claim this number for testing
+					SET_BIT(*addr, i);
+
+					test = ((addr - res->bitmap) * 8) + i + 1;
+
+					if (sem_post(res->bitmap_sem) == -1) {
+						perror("Could not unlock semaphore");
+						return false;
+					}
+
+					return test;
+				} else {
+					// Else unlock the semaphore and continue the loop
+					if (sem_post(res->bitmap_sem) == -1) {
+						perror("Could not unlock semaphore");
+						return false;
+					}
+				}
 			}
 		}
 	}
