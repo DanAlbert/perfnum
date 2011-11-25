@@ -2,7 +2,6 @@ EXE = manage
 
 SHELL = sh
 CC = gcc
-LD = ld
 REMOVE = rm -f
 REMOVEDIR = rm -rf
 
@@ -21,7 +20,6 @@ CFLAGS =	$(INCLUDEDIRS) \
 			-Wstrict-prototypes \
 			-std=gnu99 \
 			$(OPTIMIZATION) \
-			$(DEBUG) \
 
 LDFLAGS =	-lm \
 			-lrt \
@@ -40,7 +38,7 @@ all: $(EXE)
 $(EXE): $(OBJ)
 	@echo
 	@echo Linking: $@
-	$(LD) -o $@ $(LDFLAGS) $^
+	$(CC) -o $@ $(ALL_CFLAGS) $(LDFLAGS) $^
 
 # Compile: create object files from C source files.
 $(OBJDIR)/%.o : %.c
