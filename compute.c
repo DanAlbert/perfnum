@@ -130,6 +130,9 @@ int main(int argc, char **argv) {
 		end = atoi(argv[3]);
 		pipe_loop(start, end);
 		break;
+	default:
+		fprintf(stderr, "Unknown mode\n");
+		exit(EXIT_FAILURE);
 	}
 
 	return 0;

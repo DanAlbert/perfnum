@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
 	switch (mode) {
 	case 'm':
-		if (shmem_load(&res) == -1) {
+		if (shmem_load(&res) == false) {
 			exit(EXIT_FAILURE);
 		}
 		shmem_report(&res);

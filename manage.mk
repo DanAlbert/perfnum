@@ -6,6 +6,7 @@ REMOVE = rm -f
 REMOVEDIR = rm -rf
 
 SRC =	manage.c \
+		shmem.c \
 
 DEBUG = -g
 OPTIMIZATION = -O3

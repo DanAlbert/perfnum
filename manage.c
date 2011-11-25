@@ -82,7 +82,7 @@ void shmem_report(struct shmem_res *res);
 void sock_report(struct sock_res *res);
 
 void pipe_cleanup(struct pipe_res *res);
-void shmem_cleanup(struct shmem_res *res);
+void shmem_cleanup(void);
 void sock_cleanup(struct sock_res *res);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
@@ -120,12 +120,10 @@ int main(int argc, char **argv) {
 		if (shmem_init(argc, argv, &shmem_res) == false) {
 			exit(EXIT_FAILURE);
 		}
-
-		while (all_tested(&shmem_res) == false) {
-			sleep(1);
-		}
-
-		shmem_cleanup(&shmem_res);
+		break;
+	case 'c':
+		// Clean shmem
+		shmem_cleanup();
 		break;
 	case 's':
 		// Socket stuff
@@ -218,8 +216,14 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	return true;
 }
 
-void shmem_cleanup(struct shmem_res *res) {
-	while (sem_destroy(res->bitmap_sem) == -1) {
+void shmem_cleanup(void) {
+	struct shmem_res res;
+
+	if (shmem_load(&res) == false) {
+		return;
+	}
+
+	while (sem_destroy(res.bitmap_sem) == -1) {
 		if (errno == EINVAL) {
 			break;
 		}
@@ -227,7 +231,7 @@ void shmem_cleanup(struct shmem_res *res) {
 		// Else something is currently blocking on the semaphore, keep up the attack
 	}
 
-	while (sem_destroy(res->perfect_numbers_sem) == -1) {
+	while (sem_destroy(res.perfect_numbers_sem) == -1) {
 		if (errno == EINVAL) {
 			break;
 		}
@@ -460,9 +464,12 @@ bool all_tested(struct shmem_res *res) {
 }
 
 void usage(void) {
-	fprintf(stdout, "Usage: manage [mps] <limit> <nprocs>\n");
+	fprintf(stdout, "Usage: manage [cmps] <limit> <nprocs>\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "Modes:\n");
+	fprintf(stdout, "    c - clean up shared memory\n");
+	fprintf(stdout, "        usage: manage c\n");
+	fprintf(stdout, "\n");
 	fprintf(stdout, "    m - shared memory\n");
 	fprintf(stdout, "        usage: manage m <limit>\n");
 	fprintf(stdout, "\n");
@@ -480,3 +487,4 @@ void usage(void) {
 
 	exit(EXIT_FAILURE);
 }
+
