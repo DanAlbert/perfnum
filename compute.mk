@@ -2,14 +2,15 @@ EXE = compute
 
 SHELL = sh
 CC = gcc
+LD = ld
 REMOVE = rm -f
 REMOVEDIR = rm -rf
 
 SRC =	compute.c \
 		shmem.c \
 
-DEBUG = -ggdb
-OPTIMIZATION = 
+DEBUG = -g
+OPTIMIZATION = -O3
 INCLUDEDIRS = 
 OBJDIR = obj
 
@@ -22,6 +23,8 @@ CFLAGS =	$(INCLUDEDIRS) \
 			-std=gnu99 \
 			$(OPTIMIZATION) \
 			$(DEBUG) \
+
+LDFLAGS =	-lrt \
 
 # Compiler flags to generate dependency files.
 GENDEPFLAGS = -MMD -MP -MF .dep/$(@F).d
@@ -37,7 +40,7 @@ all: $(EXE)
 $(EXE): $(OBJ)
 	@echo
 	@echo Linking: $@
-	$(CC) -o $@ $(ALL_CFLAGS) $^
+	$(LD) -o $@ $(LDFLAGS) $^
 
 # Compile: create object files from C source files.
 $(OBJDIR)/%.o : %.c

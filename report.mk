@@ -2,6 +2,7 @@ EXE = report
 
 SHELL = sh
 CC = gcc
+LD = ld
 REMOVE = rm -f
 REMOVEDIR = rm -rf
 
@@ -20,7 +21,9 @@ CFLAGS =	$(INCLUDEDIRS) \
 			-Wmissing-declarations \
 			-Wstrict-prototypes \
 			-std=gnu99 \
-			$(OPTIMIZATION) \
+		 	$(OPTIMIZATION) \
+
+LDFLAGS =	-lrt \
 
 # Compiler flags to generate dependency files.
 GENDEPFLAGS = -MMD -MP -MF .dep/$(@F).d
@@ -36,7 +39,7 @@ all: $(EXE)
 $(EXE): $(OBJ)
 	@echo
 	@echo Linking: $@
-	$(CC) -o $@ $(ALL_CFLAGS) $^
+	$(LD) -o $@ $(LDFLAGS) $^
 
 # Compile: create object files from C source files.
 $(OBJDIR)/%.o : %.c

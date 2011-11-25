@@ -79,11 +79,11 @@ bool sock_init(int argc, char **argv, struct sock_res *res);
 
 void pipe_report(struct pipe_res *res);
 void shmem_report(struct shmem_res *res);
-void sock_report(struct sock_res *res);
+//void sock_report(struct sock_res *res);
 
 void pipe_cleanup(struct pipe_res *res);
 void shmem_cleanup(struct shmem_res *res);
-void sock_cleanup(struct sock_res *res);
+//void sock_cleanup(struct sock_res *res);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
 int spawn_report(pid_t *pid, int fds[2]);
@@ -132,8 +132,8 @@ int main(int argc, char **argv) {
 		if (sock_init(argc, argv, &sock_res) == false) {
 			exit(EXIT_FAILURE);
 		}
-		sock_report(&sock_res);
-		sock_cleanup(&sock_res);
+		//sock_report(&sock_res);
+		//sock_cleanup(&sock_res);
 		break;
 	default:
 		usage();
