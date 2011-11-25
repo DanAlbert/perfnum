@@ -40,6 +40,8 @@ void shmem_report(struct shmem_res *res);
 
 void pipe_report(void);
 
+int next_test(struct shmem_res *res);
+
 int main(int argc, char **argv) {
 	struct shmem_res res;
 	char mode;
@@ -77,12 +79,22 @@ int main(int argc, char **argv) {
 }
 
 void shmem_report(struct shmem_res *res) {
+	int next;
+
 	assert(res != NULL);
 
 	for (int i = 0; i < NPERFNUMS; i++) {
 		if (res->perfect_numbers[i] != 0) {
 			printf("%d\n", res->perfect_numbers[i]);
 		}
+	}
+
+	next = next_test(res);
+
+	if (next == -1) {
+		printf("Testing complete\n");
+	} else {
+		printf("Next untested integer: %d\n", next);
 	}
 }
 
@@ -93,3 +105,21 @@ void pipe_report(void) {
 		c = getchar();
 	}
 }
+
+int next_test(struct shmem_res *res) {
+	assert(res != NULL);
+
+	// Loop over each byte in the bitmap
+	// Will actually test until the end of the byte if manage was given a limit that was
+	// not a power of two
+	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
+		for (int i = 0; i < 8; i++) {
+			if (BIT(*addr, i) == 0) {
+				return ((addr - res->bitmap) * 8) + i + 1;
+			}
+		}
+	}
+
+	return -1;
+}
+
