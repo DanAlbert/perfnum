@@ -294,9 +294,6 @@ void pipe_report(struct pipe_res *res) {
 	}
 }
 
-void shmem_report(struct shmem_res *res) {
-}
-
 void pipe_cleanup(struct pipe_res *res) {
 	assert(res != NULL);
 

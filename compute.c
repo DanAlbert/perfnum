@@ -59,7 +59,7 @@ bool is_perfect_number(unsigned int n);
 int next_test(struct shmem_res *res);
 
 void shmem_loop(struct shmem_res *res);
-void shmem_report(struct shmem_res *res, int n);
+bool shmem_report(struct shmem_res *res, int n);
 
 void pipe_loop(int start, int end);
 
@@ -214,23 +214,42 @@ void shmem_loop(struct shmem_res *res) {
 	test = next_test(res);
 	while (test != -1) {
 		if (is_perfect_number(test) == true) {
-			shmem_report(res, test);
+			if (shmem_report(res, test) == false) {
+				fprintf(stderr, "Could not report perfect number (%d)\n", test);
+			}
 		}
 
 		test = next_test(res);
 	}
 }
 
-void shmem_report(struct shmem_res *res, int n) {
+bool shmem_report(struct shmem_res *res, int n) {
 	assert(res != NULL);
+
+	while (sem_wait(res->perfect_numbers_sem) != 0) {
+		if ((errno == EDEADLK) || (errno == EINVAL)) {
+			perror("Could not lock semaphore");
+			return false;
+		}
+
+		// Else we received EAGAIN or EINTR and should wait again
+	}
 
 	for (int i = 0; i < NPERFNUMS; i++) {
 		if (res->perfect_numbers[i] == 0) {
 			// Open slot, use it
 			res->perfect_numbers[i] = n;
-			return;
+
+			if (sem_post(res->perfect_numbers_sem) == -1) {
+				perror("Could not unlock semaphore");
+				return false;
+			}
+
+			return true;
 		}
 	}
+
+	return false;
 }
 
 void pipe_loop(int start, int end) {
