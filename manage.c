@@ -28,7 +28,11 @@
  * so that it can signal them to terminate.
  *
  */
+#include <arpa/inet.h>
+#include <netinet/in.h> // For sockaddr_in
 #include <sys/mman.h>
+#include <sys/socket.h>
+#include <sys/time.h> // For timeval
 #include <sys/wait.h>
 #include <assert.h>
 #include <errno.h>
@@ -57,6 +61,9 @@
 /// Number of arguments required for sockets method
 #define SOCK_ARGC 2
 
+/// Maximum number of clients to allow
+#define MAX_CLIENTS 1024
+
 #define READ 0
 #define WRITE 1
 
@@ -71,6 +78,8 @@ struct pipe_res {
 
 struct sock_res {
 	int listen;
+	int clients[MAX_CLIENTS];
+	fd_set allfds;
 };
 
 bool pipe_init(int argc, char **argv, struct pipe_res *res);
