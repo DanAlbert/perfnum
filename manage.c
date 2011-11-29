@@ -43,6 +43,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h> // For memset()
 #include <unistd.h>
 #include "shmem.h"
 
@@ -61,8 +62,17 @@
 /// Number of arguments required for sockets method
 #define SOCK_ARGC 2
 
+/// Port the server will listen on
+#define SERVER_PORT 10054
+
+/// Maximum number of queued connections
+#define MAX_BACKLOG 32
+
 /// Maximum number of clients to allow
-#define MAX_CLIENTS 1024
+#define MAX_CLIENTS FD_SETSIZE
+
+/// Read buffer size
+#define BUF_SIZE 8192
 
 #define READ 0
 #define WRITE 1
@@ -80,18 +90,20 @@ struct sock_res {
 	int listen;
 	int clients[MAX_CLIENTS];
 	fd_set allfds;
+	int maxfd;
+	int maxi;
 };
 
 bool pipe_init(int argc, char **argv, struct pipe_res *res);
-bool shmem_init(int argc, char **argv, struct shmem_res *res);
-bool sock_init(int argc, char **argv, struct sock_res *res);
-
 void pipe_report(struct pipe_res *res);
-void shmem_report(struct shmem_res *res);
-void sock_report(struct sock_res *res);
-
 void pipe_cleanup(struct pipe_res *res);
+
+bool shmem_init(int argc, char **argv, struct shmem_res *res);
+void shmem_report(struct shmem_res *res);
 void shmem_cleanup(void);
+
+bool sock_init(int argc, char **argv, struct sock_res *res);
+void sock_report(struct sock_res *res);
 void sock_cleanup(struct sock_res *res);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
@@ -256,12 +268,121 @@ void shmem_cleanup(void) {
 }
 
 bool sock_init(int argc, char **argv, struct sock_res *res) {
+	struct sockaddr_in servaddr;
+
+	assert(res != NULL);
+
 	if (argc < SOCK_ARGC) {
 		usage();
 	}
 
-	printf("sockets unimplemented\n");
-	return false;
+	res->listen = socket(AF_INET, SOCK_STREAM, 0);
+	if (res->listen == -1) {
+		perror("Could not create socket");
+		return false;
+	}
+
+	memset(&servaddr, 0, sizeof(servaddr));
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port = htons(SERVER_PORT);
+
+	if (bind(res->listen, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
+		perror("Unable to bind socket");
+		return false;
+	}
+
+	if (listen(res->listen, MAX_BACKLOG) == -1) {
+		perror("Unable to listen on socket");
+	}
+
+	res->maxfd = res->listen;
+	res->maxi = -1;
+
+	for (int i = 0; i < MAX_CLIENTS; i++) {
+		res->clients[i] = -1; // Denotes an unused index
+	}
+
+	FD_ZERO(&res->allfds);
+	FD_SET(res->listen, &res->allfds);
+
+	return true;
+}
+
+void sock_report(struct sock_res *res) {
+	struct sockaddr_in addr;
+	socklen_t len;
+
+	char buf[BUF_SIZE];
+	int fd;
+	int n;
+
+	fd_set rset;
+	int nready;
+
+	while (1) {
+		rset = res->allfds;
+		nready = select(res->maxfd+1, &rset, NULL, NULL, NULL);
+
+		if (FD_ISSET(res->listen, &rset)) {
+			// New client connection
+			len = sizeof(addr);
+			fd = accept(res->listen, (struct sockaddr *)&addr, &len);
+
+			for (int i = 0; i <= FD_SETSIZE; i++) {
+				if (i == MAX_CLIENTS) {
+					perror("Client limit reached");
+					close(fd); // Drop the client
+				} else {
+					if (res->clients[i] < 0) {
+						if (i > res->maxi) {
+							res->maxi = i;
+						}
+
+						res->clients[i] = fd;
+						break;
+					}
+				}
+			}
+
+			FD_SET(fd, &res->allfds);
+			if (fd > res->maxfd) {
+				res->maxfd = fd;
+			}
+
+			if (--nready <= 0) {
+				// No more readable descriptors
+				continue;
+			}
+		}
+
+		// Check all clients for data
+		for (int i = 0; i <= res->maxi; i++) {
+			fd = res->clients[i];
+			if (fd < 0){
+				continue;
+			}
+
+			if (FD_ISSET(fd, &rset)) {
+				if ( (n = read(fd, buf, BUF_SIZE)) == 0) {
+					// Connection closed by client
+					close(fd);
+					FD_CLR(fd, &res->allfds);
+					res->clients[i] = -1;
+				} else{
+					write(fd, buf, n);
+				}
+
+				if (--nready <= 0) {
+					// No more readable descriptors
+					break;
+				}
+			}
+		}
+	}
+}
+
+void sock_cleanup(struct sock_res *res) {
 }
 
 void pipe_report(struct pipe_res *res) {
