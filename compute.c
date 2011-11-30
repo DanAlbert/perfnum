@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 		shmem_loop(&res);
-		break;fprintf(stderr, "Found perfnum\n");
+		break;
 	case 'p':
 		if (argc < PIPE_ARGC) {
 			printf("Test limits not specified.\n");
