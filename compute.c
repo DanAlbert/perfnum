@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "packets.h"
 #include "shmem.h"
 
 /// The maximum number of divisors to store
@@ -120,7 +121,7 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 		shmem_loop(&res);
-		break;
+		break;fprintf(stderr, "Found perfnum\n");
 	case 'p':
 		if (argc < PIPE_ARGC) {
 			printf("Test limits not specified.\n");
@@ -253,6 +254,8 @@ bool shmem_report(struct shmem_res *res, int n) {
 }
 
 void pipe_loop(int start, int end) {
+	union packet packet;
+
 	assert(start > 0);
 	assert(end > start);
 
@@ -261,10 +264,18 @@ void pipe_loop(int start, int end) {
 			pipe_report(i);
 		}
 	}
+
+	packet.id = PACKETID_DONE;
+	send_packet(STDOUT_FILENO, &packet);
 }
 
 void pipe_report(int n) {
-	printf("%d\n", n);
+	union packet packet;
+
+	packet.id = PACKETID_PERFNUM;
+	packet.perfnum.perfnum = n;
+
+	send_packet(STDOUT_FILENO, &packet);
 }
 
 void quit(int sig) {

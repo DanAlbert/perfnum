@@ -30,10 +30,13 @@
  *
  */
 #include <assert.h>
+#include <errno.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "packets.h"
 #include "shmem.h"
 
 void shmem_report(struct shmem_res *res);
@@ -99,10 +102,39 @@ void shmem_report(struct shmem_res *res) {
 }
 
 void pipe_report(void) {
-	char c = getchar();
-	while (c != EOF) {
-		putchar(c);
-		c = getchar();
+	union packet packet;
+	ssize_t chars_read;
+	int perfnum;
+	bool done = false;
+
+	while (done == false) {
+		chars_read = get_packet(STDIN_FILENO, &packet);
+		if (chars_read == 0) {
+			//break;
+		} else if (chars_read == -1) {
+			if (errno != EAGAIN) {
+				perror(NULL);
+			}
+		}
+
+		if (chars_read > 0) {
+			switch (packet.id) {
+			case PACKETID_PERFNUM:
+				printf("%d\n", packet.perfnum.perfnum);
+				break;
+			case PACKETID_DONE:
+				printf("[report] Received done\n");
+				done = true;
+				break;
+			case PACKETID_NULL:
+			case PACKETID_RANGE:
+				printf("[report] Invalid packet: %#02x\n", packet.id);
+				break;
+			default:
+				printf("[report] Unrecognized packet: %#02x\n", packet.id);
+				break;
+			}
+		}
 	}
 }
 

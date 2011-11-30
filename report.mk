@@ -6,6 +6,7 @@ REMOVE = rm -f
 REMOVEDIR = rm -rf
 
 SRC =	report.c \
+		packets.c \
 		shmem.c \
 
 DEBUG = -g

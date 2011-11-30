@@ -45,6 +45,7 @@
 #include <stdlib.h>
 #include <string.h> // For memset()
 #include <unistd.h>
+#include "packets.h"
 #include "shmem.h"
 
 /// Path to compute program
@@ -61,6 +62,9 @@
 
 /// Number of arguments required for sockets method
 #define SOCK_ARGC 2
+
+/// Size of the perfnums array in pipe_res
+#define SPERFNUMS 5
 
 /// Port the server will listen on
 #define SERVER_PORT 10054
@@ -80,6 +84,8 @@
 struct pipe_res {
 	pid_t *compute_pids;
 	pid_t report_pid;
+	int perfnums[SPERFNUMS];
+	int nperfnums;
 	int compute_pipe[2];
 	int report_pipe[2];
 	int nprocs;
@@ -99,7 +105,6 @@ void pipe_report(struct pipe_res *res);
 void pipe_cleanup(struct pipe_res *res);
 
 bool shmem_init(int argc, char **argv, struct shmem_res *res);
-void shmem_report(struct shmem_res *res);
 void shmem_cleanup(void);
 
 bool sock_init(int argc, char **argv, struct sock_res *res);
@@ -110,8 +115,6 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
 int spawn_report(pid_t *pid, int fds[2]);
 
 void *shmem_mount(char *path, int object_size);
-
-bool all_tested(struct shmem_res *res);
 
 void usage(void);
 
@@ -169,6 +172,7 @@ bool pipe_init(int argc, char **argv, struct pipe_res *res) {
 		usage();
 	}
 
+	res->nperfnums = 0;
 	res->limit = atoi(argv[2]);
 	res->nprocs = atoi(argv[3]);
 
@@ -242,6 +246,8 @@ void shmem_cleanup(void) {
 
 	if (shmem_load(&res) == false) {
 		return;
+
+		bool all_tested(struct shmem_res *res);
 	}
 
 	while (sem_destroy(res.bitmap_sem) == -1) {
@@ -386,14 +392,15 @@ void sock_cleanup(struct sock_res *res) {
 }
 
 void pipe_report(struct pipe_res *res) {
-	char buf[PIPE_BUF];
 	pid_t pid;
+	union packet packet;
 	int body_count = 0;
-	int chars_read;
+	int bytes_read;
+	bool done = false;
 
 	assert(res != NULL);
 
-	while (body_count < res->nprocs) {
+	while (done == false) {
 		do {
 			pid = waitpid(-1, NULL, WNOHANG);
 			if (pid == res->report_pid) {
@@ -409,19 +416,40 @@ void pipe_report(struct pipe_res *res) {
 			}
 		} while ((pid > 0) && (body_count < res->nprocs));
 
-		chars_read = read(res->compute_pipe[READ], buf, PIPE_BUF);
-		if (chars_read == 0) {
+		bytes_read = get_packet(res->compute_pipe[READ], &packet);
+		if (bytes_read == 0) {
 			break;
-		} else if (chars_read == -1) {
+		} else if (bytes_read == -1) {
 			if (errno != EAGAIN) {
-				perror("FUBAR");
+				perror(NULL);
 			}
 		}
 
-		if (chars_read > 0) {
-			write(res->report_pipe[WRITE], buf, chars_read);
+		if (bytes_read > 0) {
+			switch (packet.id) {
+			case PACKETID_PERFNUM:
+				res->perfnums[res->nperfnums++] = packet.perfnum.perfnum;
+				send_packet(res->report_pipe[WRITE], &packet);
+				break;
+			case PACKETID_DONE:
+				printf("[manage] Received done\n");
+				done = true;
+				// TODO: Give it another range
+				break;
+			case PACKETID_NULL:
+			case PACKETID_RANGE:
+				printf("[manage] Invalid packet: %#02x\n", packet.id);
+				break;
+			default:
+				printf("[manage] Unrecognized packet: %#02x\n", packet.id);
+				break;
+			}
 		}
 	}
+
+	packet.id = PACKETID_DONE;
+	packet.done.pid = getpid();
+	send_packet(res->report_pipe[WRITE], &packet);
 }
 
 void pipe_cleanup(struct pipe_res *res) {
@@ -465,6 +493,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 		// End is stored from previous loop
 		start = end + 1;
 
+		void shmem_report(struct shmem_res *res);
 		// Weight the extra numbers to the front (started first, fastest check)
 		if (i == 0)
 		{
@@ -482,6 +511,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 			(*pids)[i] = pid;
 		} else if (pid == 0) {
 			// Child
+			void shmem_report(struct shmem_res *res);
 
 			// Duplicate write end of pipe to stdout
 			if (dup2(fds[WRITE], STDOUT_FILENO) == -1) {
@@ -571,23 +601,6 @@ void *shmem_mount(char *path, int object_size) {
     }
 
     return addr;
-}
-
-bool all_tested(struct shmem_res *res) {
-	assert(res != NULL);
-
-	// Loop over each byte in the bitmap
-	// Will actually test until the end of the byte if manage was given a limit that was
-	// not a power of two
-	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
-		for (int i = 0; i < 8; i++) {
-			if (BIT(*addr, i) == 0) {
-				return false;
-			}
-		}
-	}
-
-	return true;
 }
 
 void usage(void) {
