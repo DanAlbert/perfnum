@@ -32,7 +32,9 @@
 #include <netinet/in.h> // For sockaddr_in
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h> // For mkfifo()
 #include <sys/time.h> // For timeval
+#include <sys/types.h> // For S_IRUSR, etc.
 #include <sys/wait.h>
 #include <assert.h>
 #include <errno.h>
@@ -56,6 +58,12 @@
 
 /// Number of arguments required for pipe method
 #define PIPE_ARGC 4
+
+/// File path of named pipe for pipe method
+#define FIFO_PATH ".perfect_numbers"
+
+/// File mode of named pipe for pipe method
+#define FIFO_MODE (S_IRUSR | S_IWUSR)
 
 /// Number of arguments required for shared memory method
 #define SHMEM_ARGC 3
@@ -83,11 +91,10 @@
 
 struct pipe_res {
 	pid_t *compute_pids;
-	pid_t report_pid;
 	int perfnums[SPERFNUMS];
 	int nperfnums;
 	int compute_pipe[2];
-	int report_pipe[2];
+	int report_fifo;
 	int nprocs;
 	int limit;
 };
@@ -112,7 +119,7 @@ void sock_report(struct sock_res *res);
 void sock_cleanup(struct sock_res *res);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
-int spawn_report(pid_t *pid, int fds[2]);
+bool collect_zombies(struct pipe_res *res);
 
 void *shmem_mount(char *path, int object_size);
 
@@ -184,11 +191,83 @@ bool pipe_init(int argc, char **argv, struct pipe_res *res) {
 		return false;
 	}
 
-	if (spawn_report(&res->report_pid, res->report_pipe) == -1) {
+	if (mkfifo(FIFO_PATH, FIFO_MODE) == -1) {
+		perror("Could not make FIFO");
+		return false;
+	}
+
+	res->report_fifo = open(FIFO_PATH, O_WRONLY);
+	if (res->report_fifo == -1) {
+		perror("Could not open FIFO");
 		return false;
 	}
 
 	return true;
+}
+
+void pipe_report(struct pipe_res *res) {
+	union packet packet;
+	int bytes_read;
+	int body_count = 0;
+
+	assert(res != NULL);
+
+	// Loop until signaled to quit
+	while (body_count < res->nprocs) {
+		bytes_read = get_packet(res->compute_pipe[READ], &packet);
+		if (bytes_read == 0) {
+			//break;
+		} else if (bytes_read == -1) {
+			if (errno != EAGAIN) {
+				perror(NULL);
+			}
+		}
+
+		if (bytes_read > 0) {
+			switch (packet.id) {
+			case PACKETID_PERFNUM:
+				res->perfnums[res->nperfnums++] = packet.perfnum.perfnum;
+				send_packet(res->report_fifo, &packet);
+				break;
+			case PACKETID_DONE:
+				fprintf(stderr, "[manage] Received done\n");
+				if (waitpid(packet.done.pid, NULL, 0) == -1) {
+					perror(NULL);
+				} else {
+					body_count++;
+				}
+				// TODO: Give it another range
+				break;
+			case PACKETID_NULL:
+			case PACKETID_RANGE:
+				fprintf(stderr, "[manage] Invalid packet: %#02x\n", packet.id);
+				break;
+			default:
+				fprintf(stderr, "[manage] Unrecognized packet: %#02x\n", packet.id);
+				break;
+			}
+		}
+
+		fflush(stderr);
+	}
+}
+
+void pipe_cleanup(struct pipe_res *res) {
+	union packet packet;
+
+	assert(res != NULL);
+
+	// Inform report that computation is finished
+	packet.id = PACKETID_DONE;
+	packet.done.pid = getpid();
+	send_packet(res->report_fifo, &packet);
+
+	// Clean up pipes
+	close(res->compute_pipe[READ]);
+	close(res->report_fifo);
+	unlink(FIFO_PATH);
+
+	free(res->compute_pids);
 }
 
 bool shmem_init(int argc, char **argv, struct shmem_res *res) {
@@ -391,80 +470,6 @@ void sock_report(struct sock_res *res) {
 void sock_cleanup(struct sock_res *res) {
 }
 
-void pipe_report(struct pipe_res *res) {
-	pid_t pid;
-	union packet packet;
-	int body_count = 0;
-	int bytes_read;
-	bool done = false;
-
-	assert(res != NULL);
-
-	while (done == false) {
-		do {
-			pid = waitpid(-1, NULL, WNOHANG);
-			if (pid == res->report_pid) {
-				// report exited unexpectedly
-				printf("report exited unexpectedly\n");
-			} else if (pid == 0) {
-				// Nothing has exited
-			} else if (pid == -1) {
-				perror("manage");
-			} else {
-				// Zombie neutralized
-				body_count++;
-			}
-		} while ((pid > 0) && (body_count < res->nprocs));
-
-		bytes_read = get_packet(res->compute_pipe[READ], &packet);
-		if (bytes_read == 0) {
-			break;
-		} else if (bytes_read == -1) {
-			if (errno != EAGAIN) {
-				perror(NULL);
-			}
-		}
-
-		if (bytes_read > 0) {
-			switch (packet.id) {
-			case PACKETID_PERFNUM:
-				res->perfnums[res->nperfnums++] = packet.perfnum.perfnum;
-				send_packet(res->report_pipe[WRITE], &packet);
-				break;
-			case PACKETID_DONE:
-				printf("[manage] Received done\n");
-				done = true;
-				// TODO: Give it another range
-				break;
-			case PACKETID_NULL:
-			case PACKETID_RANGE:
-				printf("[manage] Invalid packet: %#02x\n", packet.id);
-				break;
-			default:
-				printf("[manage] Unrecognized packet: %#02x\n", packet.id);
-				break;
-			}
-		}
-	}
-
-	packet.id = PACKETID_DONE;
-	packet.done.pid = getpid();
-	send_packet(res->report_pipe[WRITE], &packet);
-}
-
-void pipe_cleanup(struct pipe_res *res) {
-	assert(res != NULL);
-
-	// Clean up pipes
-	close(res->compute_pipe[READ]);
-	close(res->report_pipe[WRITE]);
-
-	// Wait for report to die
-	waitpid(res->report_pid, NULL, 0);
-
-	free(res->compute_pids);
-}
-
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	int flags;
 	int numbers_per_proc = floor((double)limit / (double)nprocs);
@@ -546,36 +551,24 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	return 0;
 }
 
-int spawn_report(pid_t *pid, int fds[2]) {
-	if (pipe(fds) == -1) {
-		perror("Unable to open report pipe");
-		return -1;
-	}
+bool collect_zombies(struct pipe_res *res)
+{
+	pid_t pid = 0;
+	static int body_count = 0;
 
-	assert(pid != NULL);
-
-	*pid = fork();
-
-	if (*pid > 0) {
-		close(fds[READ]);
-	} else if (*pid == 0) {
-		if (dup2(fds[READ], STDIN_FILENO) == -1) {
-			perror("Could not duplicate file descriptor");
-			return -1;
+	while ((pid > 0) && (body_count < res->nprocs)) {
+		pid = waitpid(-1, NULL, WNOHANG);
+		if (pid == 0) {
+			// Nothing has exited
+		} else if (pid == -1) {
+			perror("manage");
+		} else {
+			// Zombie neutralized
+			body_count++;
 		}
+	};
 
-		close(fds[WRITE]);
-
-		if (execl(REPORT_CMD, REPORT_CMD, "p", NULL) == -1) {
-			perror("Unable to exec report");
-			return -1;
-		}
-	} else {
-		perror("Unable to fork report");
-		return -1;
-	}
-
-	return 0;
+	return body_count == res->nprocs;
 }
 
 void *shmem_mount(char *path, int object_size) {

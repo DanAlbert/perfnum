@@ -266,6 +266,7 @@ void pipe_loop(int start, int end) {
 	}
 
 	packet.id = PACKETID_DONE;
+	packet.done.pid = getpid();
 	send_packet(STDOUT_FILENO, &packet);
 }
 

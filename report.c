@@ -31,22 +31,32 @@
  */
 #include <assert.h>
 #include <errno.h>
-#include <limits.h>
+#include <fcntl.h> // For O_RDONLY
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "packets.h"
 #include "shmem.h"
 
-void shmem_report(struct shmem_res *res);
+/// File path of named pipe for pipe method
+#define FIFO_PATH ".perfect_numbers"
 
-void pipe_report(void);
+int pipe_init(void);
+void pipe_report(int fd);
+void pipe_cleanup(int fd);
+
+void kill_processes(void);
+
+void shmem_report(struct shmem_res *res);
 
 int next_test(struct shmem_res *res);
 
 int main(int argc, char **argv) {
 	struct shmem_res res;
+	int fifo;
 	char mode;
 
 	if (argc < 2) {
@@ -64,7 +74,13 @@ int main(int argc, char **argv) {
 		shmem_report(&res);
 		break;
 	case 'p':
-		pipe_report();
+		fifo = pipe_init();
+		if (fifo == -1) {
+			fprintf(stderr, "Could not initialize pipes");
+			exit(EXIT_FAILURE);
+		}
+		pipe_report(fifo);
+		pipe_cleanup(fifo);
 		break;
 	case 's':
 		printf("Sockets not implemented\n");
@@ -72,6 +88,7 @@ int main(int argc, char **argv) {
 	case 'k':
 		// Signal manage to shutdown computation
 		printf("Kill not implemented\n");
+		kill_processes();
 		exit(EXIT_FAILURE);
 	default:
 		printf("Invalid mode\n");
@@ -79,6 +96,54 @@ int main(int argc, char **argv) {
 	}
 
 	exit(EXIT_SUCCESS);
+}
+
+int pipe_init(void) {
+	return open(FIFO_PATH, O_RDONLY);
+}
+
+void pipe_report(int fd) {
+	union packet packet;
+	ssize_t chars_read;
+	bool done = false;
+
+	while (done == false) {
+		chars_read = get_packet(fd, &packet);
+		if (chars_read == 0) {
+			//break;
+		} else if (chars_read == -1) {
+			if (errno != EAGAIN) {
+				perror(NULL);
+			}
+		}
+
+		if (chars_read > 0) {
+			switch (packet.id) {
+			case PACKETID_PERFNUM:
+				printf("%d\n", packet.perfnum.perfnum);
+				break;
+			case PACKETID_DONE:
+				printf("Computation complete. Killing processes...\n");
+				kill_processes();
+				done = true;
+				break;
+			case PACKETID_NULL:
+			case PACKETID_RANGE:
+				printf("Invalid packet: %#02x\n", packet.id);
+				break;
+			default:
+				printf("Unrecognized packet: %#02x\n", packet.id);
+				break;
+			}
+		}
+	}
+}
+
+void pipe_cleanup(int fd) {
+	close(fd);
+}
+
+void kill_processes(void) {
 }
 
 void shmem_report(struct shmem_res *res) {
@@ -98,43 +163,6 @@ void shmem_report(struct shmem_res *res) {
 		printf("Testing complete\n");
 	} else {
 		printf("Next untested integer: %d\n", next);
-	}
-}
-
-void pipe_report(void) {
-	union packet packet;
-	ssize_t chars_read;
-	int perfnum;
-	bool done = false;
-
-	while (done == false) {
-		chars_read = get_packet(STDIN_FILENO, &packet);
-		if (chars_read == 0) {
-			//break;
-		} else if (chars_read == -1) {
-			if (errno != EAGAIN) {
-				perror(NULL);
-			}
-		}
-
-		if (chars_read > 0) {
-			switch (packet.id) {
-			case PACKETID_PERFNUM:
-				printf("%d\n", packet.perfnum.perfnum);
-				break;
-			case PACKETID_DONE:
-				printf("[report] Received done\n");
-				done = true;
-				break;
-			case PACKETID_NULL:
-			case PACKETID_RANGE:
-				printf("[report] Invalid packet: %#02x\n", packet.id);
-				break;
-			default:
-				printf("[report] Unrecognized packet: %#02x\n", packet.id);
-				break;
-			}
-		}
 	}
 }
 
