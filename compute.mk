@@ -8,6 +8,7 @@ REMOVEDIR = rm -rf
 SRC =	compute.c \
 		packets.c \
 		shmem.c \
+		sock.c \
 
 DEBUG = -ggdb
 OPTIMIZATION = 

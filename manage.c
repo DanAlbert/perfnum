@@ -49,6 +49,7 @@
 #include <unistd.h>
 #include "packets.h"
 #include "shmem.h"
+#include "sock.h"
 
 /// Path to compute program
 #define COMPUTE_CMD "./compute"
@@ -69,22 +70,19 @@
 #define SHMEM_ARGC 3
 
 /// Number of arguments required for sockets method
-#define SOCK_ARGC 2
+#define SOCK_ARGC 3
+
+/// Number of tests to assign in each block
+#define NASSIGN 1000
 
 /// Size of the perfnums array in pipe_res
 #define SPERFNUMS 5
-
-/// Port the server will listen on
-#define SERVER_PORT 10054
 
 /// Maximum number of queued connections
 #define MAX_BACKLOG 32
 
 /// Maximum number of clients to allow
 #define MAX_CLIENTS FD_SETSIZE
-
-/// Read buffer size
-#define BUF_SIZE 8192
 
 #define READ 0
 #define WRITE 1
@@ -101,7 +99,13 @@ struct pipe_res {
 
 struct sock_res {
 	int listen;
+	int notify;
 	int clients[MAX_CLIENTS];
+	int perfnums[SPERFNUMS];
+	int nperfnums;
+	int limit;
+	int highest_assigned;
+	bool done;
 	fd_set allfds;
 	int maxfd;
 	int maxi;
@@ -117,11 +121,14 @@ void shmem_cleanup(void);
 bool sock_init(int argc, char **argv, struct sock_res *res);
 void sock_report(struct sock_res *res);
 void sock_cleanup(struct sock_res *res);
+void sock_handle_packet(int fd, struct sock_res *res, union packet *p);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
 bool collect_zombies(struct pipe_res *res);
 
 void *shmem_mount(char *path, int object_size);
+
+void accept_client(struct sock_res *res);
 
 void usage(void);
 
@@ -221,6 +228,8 @@ void pipe_report(struct pipe_res *res) {
 			if (errno != EAGAIN) {
 				perror(NULL);
 			}
+		} else if (bytes_read != sizeof(packet)) {
+			// Did not receive a full packet. Panic?
 		}
 
 		if (bytes_read > 0) {
@@ -247,8 +256,6 @@ void pipe_report(struct pipe_res *res) {
 				break;
 			}
 		}
-
-		fflush(stderr);
 	}
 }
 
@@ -381,6 +388,11 @@ bool sock_init(int argc, char **argv, struct sock_res *res) {
 		perror("Unable to listen on socket");
 	}
 
+	res->notify = -1;
+	res->nperfnums = 0;
+	res->limit = atoi(argv[2]);
+	res->highest_assigned = 0;
+	res->done = false;
 	res->maxfd = res->listen;
 	res->maxi = -1;
 
@@ -395,12 +407,9 @@ bool sock_init(int argc, char **argv, struct sock_res *res) {
 }
 
 void sock_report(struct sock_res *res) {
-	struct sockaddr_in addr;
-	socklen_t len;
-
-	char buf[BUF_SIZE];
+	union packet packet;
 	int fd;
-	int n;
+	int bytes_read;
 
 	fd_set rset;
 	int nready;
@@ -411,29 +420,7 @@ void sock_report(struct sock_res *res) {
 
 		if (FD_ISSET(res->listen, &rset)) {
 			// New client connection
-			len = sizeof(addr);
-			fd = accept(res->listen, (struct sockaddr *)&addr, &len);
-
-			for (int i = 0; i <= FD_SETSIZE; i++) {
-				if (i == MAX_CLIENTS) {
-					perror("Client limit reached");
-					close(fd); // Drop the client
-				} else {
-					if (res->clients[i] < 0) {
-						if (i > res->maxi) {
-							res->maxi = i;
-						}
-
-						res->clients[i] = fd;
-						break;
-					}
-				}
-			}
-
-			FD_SET(fd, &res->allfds);
-			if (fd > res->maxfd) {
-				res->maxfd = fd;
-			}
+			accept_client(res);
 
 			if (--nready <= 0) {
 				// No more readable descriptors
@@ -449,13 +436,21 @@ void sock_report(struct sock_res *res) {
 			}
 
 			if (FD_ISSET(fd, &rset)) {
-				if ( (n = read(fd, buf, BUF_SIZE)) == 0) {
+				bytes_read = get_packet(fd, &packet);
+				if (bytes_read == 0) {
 					// Connection closed by client
+					if (fd == res->notify) {
+						// Unregister notify client
+						res->notify = -1;
+					}
 					close(fd);
 					FD_CLR(fd, &res->allfds);
 					res->clients[i] = -1;
-				} else{
-					write(fd, buf, n);
+				} else if (bytes_read != sizeof(packet)) {
+					// Did not receive a full packet. Panic?
+					fprintf(stderr, "Did not receive a full packet\n");
+				} else {
+					sock_handle_packet(fd, res, &packet);
 				}
 
 				if (--nready <= 0) {
@@ -468,6 +463,70 @@ void sock_report(struct sock_res *res) {
 }
 
 void sock_cleanup(struct sock_res *res) {
+}
+
+void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
+	union packet outbound;
+
+	switch (p->id) {
+	case PACKETID_PERFNUM:
+		res->perfnums[res->nperfnums++] = p->perfnum.perfnum;
+
+		// Notify client
+		if (res->notify != -1) {
+			send_packet(res->notify, p);
+		}
+
+		break;
+	case PACKETID_DONE:
+		//fprintf(stderr, "[manage] Received done\n");
+		if (res->highest_assigned < res->limit) {
+			outbound.id = PACKETID_RANGE;
+			outbound.range.start = res->highest_assigned + 1;
+			outbound.range.end = outbound.range.start + NASSIGN - 1;
+			res->highest_assigned = outbound.range.end;
+			send_packet(fd, &outbound);
+		} else {
+			res->done = true;
+			outbound.id = PACKETID_REFUSE;
+			send_packet(fd, &outbound);
+
+			if (res->notify != -1) {
+				outbound.id = PACKETID_DONE;
+				send_packet(res->notify, &outbound);
+			}
+		}
+		break;
+	case PACKETID_NOTIFY:
+		if (res->notify == -1) {
+			// No client currently registered to notify, allow
+			res->notify = fd;
+
+			// Send list of numbers already found
+			outbound.id = PACKETID_PERFNUM;
+			for (int i = 0; i < res->nperfnums; i++) {
+				outbound.perfnum.perfnum = res->perfnums[i];
+				send_packet(fd, &outbound);
+			}
+
+			if (res->done == true) {
+				outbound.id = PACKETID_DONE;
+				send_packet(fd, &outbound);
+			}
+		} else {
+			// Another client is already registered on notify, refuse
+			outbound.id = PACKETID_REFUSE;
+			send_packet(fd, &outbound);
+		}
+		break;
+	case PACKETID_NULL:
+	case PACKETID_RANGE:
+		fprintf(stderr, "[manage] Invalid packet: %#02x\n", p->id);
+		break;
+	default:
+		fprintf(stderr, "[manage] Unrecognized packet: %#02x\n", p->id);
+		break;
+	}
 }
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
@@ -551,8 +610,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	return 0;
 }
 
-bool collect_zombies(struct pipe_res *res)
-{
+bool collect_zombies(struct pipe_res *res) {
 	pid_t pid = 0;
 	static int body_count = 0;
 
@@ -594,6 +652,36 @@ void *shmem_mount(char *path, int object_size) {
     }
 
     return addr;
+}
+
+void accept_client(struct sock_res *res) {
+	struct sockaddr_in addr;
+	socklen_t len;
+	int fd;
+
+    // New client connection
+    len = sizeof(addr);
+    fd = accept(res->listen, (struct sockaddr*)&addr, &len);
+    for (int i = 0; i <= FD_SETSIZE; i++) {
+		if (i == MAX_CLIENTS) {
+			perror("Client limit reached");
+			close(fd); // Drop the client
+		} else {
+			if (res->clients[i] < 0) {
+				if (i > res->maxi) {
+					res->maxi = i;
+				}
+
+				res->clients[i] = fd;
+				break;
+			}
+		}
+	}
+
+	FD_SET(fd, &res->allfds);
+	if (fd > res->maxfd) {
+		res->maxfd = fd;
+	}
 }
 
 void usage(void) {

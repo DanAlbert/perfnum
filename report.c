@@ -40,6 +40,10 @@
 #include <unistd.h>
 #include "packets.h"
 #include "shmem.h"
+#include "sock.h"
+
+/// Number of arguments required for sockets method
+#define SOCK_ARGC 3
 
 /// File path of named pipe for pipe method
 #define FIFO_PATH ".perfect_numbers"
@@ -52,11 +56,13 @@ void kill_processes(void);
 
 void shmem_report(struct shmem_res *res);
 
+int sock_init(int argc, char **argv);
+
 int next_test(struct shmem_res *res);
 
 int main(int argc, char **argv) {
 	struct shmem_res res;
-	int fifo;
+	int fd;
 	char mode;
 
 	if (argc < 2) {
@@ -74,17 +80,22 @@ int main(int argc, char **argv) {
 		shmem_report(&res);
 		break;
 	case 'p':
-		fifo = pipe_init();
-		if (fifo == -1) {
+		fd = pipe_init();
+		if (fd == -1) {
 			fprintf(stderr, "Could not initialize pipes");
 			exit(EXIT_FAILURE);
 		}
-		pipe_report(fifo);
-		pipe_cleanup(fifo);
+		pipe_report(fd);
+		pipe_cleanup(fd);
 		break;
 	case 's':
-		printf("Sockets not implemented\n");
-		exit(EXIT_FAILURE);
+		fd = sock_init(argc, argv);
+		if (fd == -1) {
+			exit(EXIT_FAILURE);
+		}
+		sock_report(fd);
+		sock_cleanup(fd);
+		break;
 	case 'k':
 		// Signal manage to shutdown computation
 		printf("Kill not implemented\n");
@@ -92,7 +103,7 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	default:
 		printf("Invalid mode\n");
-		break;
+		exit(EXIT_FAILURE);
 	}
 
 	exit(EXIT_SUCCESS);
@@ -164,6 +175,74 @@ void shmem_report(struct shmem_res *res) {
 	} else {
 		printf("Next untested integer: %d\n", next);
 	}
+}
+
+int sock_init(int argc, char **argv) {
+	union packet p;
+	int fd;
+
+	if (argc < SOCK_ARGC) {
+		printf("Usage: report s <address>\n");
+		return -1;
+	}
+
+	fd = sock_connect(argv[2]);
+	if (fd == -1) {
+		return -1;
+	}
+
+	p.id = PACKETID_NOTIFY;
+	send_packet(fd, &p);
+
+	get_packet(fd ,&p);
+	if (p.id == PACKETID_REFUSE) {
+		fprintf(stderr, "A client is already registered to be notified by the server\n");
+
+		// Disconnect
+		close(fd);
+
+		return -1;
+	} else if (p.id == PACKETID_PERFNUM) {
+		printf("%d\n", p.perfnum.perfnum);
+	} else {
+		fprintf(stderr, "Invalid or unknown packet (%d)\n", p.id);
+	}
+
+	return fd;
+}
+
+void sock_report(int fd) {
+	union packet p;
+	ssize_t bytes_read;
+	bool done = false;
+
+	while (done == false) {
+		bytes_read = get_packet(fd, &p);
+		if (bytes_read > 0) {
+			switch (p.id) {
+			case PACKETID_PERFNUM:
+				printf("%d\n", p.perfnum.perfnum);
+				break;
+			case PACKETID_DONE:
+				printf("Computation complete\n");
+				done = true;
+				break;
+			case PACKETID_NULL:
+			case PACKETID_RANGE:
+			case PACKETID_NOTIFY:
+			case PACKETID_REFUSE:
+				fprintf(stderr, "Invalid packet: %#02x\n", p.id);
+				break;
+			default:
+				fprintf(stderr, "Unrecognized packet: %#02x\n", p.id);
+				break;
+			}
+		}
+	}
+}
+
+void sock_cleanup(int fd) {
+	close(fd);
 }
 
 int next_test(struct shmem_res *res) {

@@ -24,7 +24,7 @@
  *
  * @section DESCRIPTION
  *
- * Defines packet types for use with pipes and sockets.
+ * Defines packet types and declares functions for use with pipes and sockets.
  *
  */
 #ifndef PACKETS_H
@@ -36,7 +36,9 @@ enum packet_id {
 	PACKETID_NULL,
 	PACKETID_DONE,
 	PACKETID_RANGE,
-	PACKETID_PERFNUM
+	PACKETID_PERFNUM,
+	PACKETID_NOTIFY,
+	PACKETID_REFUSE
 };
 
 struct packet_done {
@@ -46,7 +48,7 @@ struct packet_done {
 
 struct packet_range {
 	enum packet_id packet_id;
-	int begin;
+	int start;
 	int end;
 };
 

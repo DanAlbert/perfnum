@@ -24,7 +24,7 @@
  *
  * @section DESCRIPTION
  *
- * Defines packet types for use with pipes and sockets.
+ * Defines packet types and functions for use with pipes and sockets.
  *
  */
 #include <assert.h>
@@ -39,5 +39,4 @@ int get_packet(int fd, union packet *p) {
 
 void send_packet(int fd, union packet *p) {
 	write(fd, p, sizeof(union packet));
-	fsync(fd);
 }

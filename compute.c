@@ -45,6 +45,9 @@
 /// Number of arguments to be supplied for pipe method
 #define PIPE_ARGC 4
 
+/// Number of arguments required for sockets method
+#define SOCK_ARGC 3
+
 /**
  * @brief Checks if an integer is a perfect number.
  *
@@ -75,6 +78,11 @@ void pipe_loop(int start, int end);
  */
 void pipe_report(int n);
 
+int sock_init(int argc, char **argv);
+void sock_loop(int fd);
+void sock_report(int fd, int n);
+void sock_cleanup(int fd);
+
 /**
  * @brief Exits the program cleanly.
  *
@@ -90,6 +98,7 @@ int main(int argc, char **argv) {
 	struct shmem_res res;
 	struct sigaction sigact;
 	char mode;
+	int fd;
 	int start;
 	int end;
 	
@@ -130,6 +139,14 @@ int main(int argc, char **argv) {
 		start = atoi(argv[2]);
 		end = atoi(argv[3]);
 		pipe_loop(start, end);
+		break;
+	case 's':
+		fd = sock_init(argc, argv);
+		if (fd == -1) {
+			exit(EXIT_FAILURE);
+		}
+		sock_loop(fd);
+		sock_cleanup(fd);
 		break;
 	default:
 		fprintf(stderr, "Unknown mode\n");
@@ -271,12 +288,68 @@ void pipe_loop(int start, int end) {
 }
 
 void pipe_report(int n) {
-	union packet packet;
+	union packet p;
 
-	packet.id = PACKETID_PERFNUM;
-	packet.perfnum.perfnum = n;
+	p.id = PACKETID_PERFNUM;
+	p.perfnum.perfnum = n;
 
-	send_packet(STDOUT_FILENO, &packet);
+	send_packet(STDOUT_FILENO, &p);
+}
+
+int sock_init(int argc, char **argv) {
+	int fd;
+
+	if (argc < SOCK_ARGC) {
+		printf("Usage: report s <address>\n");
+		return -1;
+	}
+
+	fd = sock_connect(argv[2]);
+	if (fd == -1) {
+		return -1;
+	}
+
+	return fd;
+}
+
+void sock_loop(int fd) {
+	union packet p;
+	bool done = false;
+
+	while (done == false) {
+		p.id = PACKETID_DONE;
+		send_packet(fd, &p);
+
+		get_packet(fd, &p);
+
+		switch (p.id) {
+		case PACKETID_REFUSE:
+			done = true;
+			break;
+		case PACKETID_RANGE:
+			for (int i = p.range.start; i <= p.range.end; i++) {
+				if (is_perfect_number(i) == true) {
+					sock_report(fd, i);
+				}
+			}
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+void sock_report(int fd, int n) {
+	union packet p;
+
+	p.id = PACKETID_PERFNUM;
+	p.perfnum.perfnum = n;
+
+	send_packet(fd, &p);
+}
+
+void sock_cleanup(int fd) {
+	close(fd);
 }
 
 void quit(int sig) {
