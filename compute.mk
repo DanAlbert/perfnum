@@ -41,7 +41,7 @@ all: $(EXE)
 $(EXE): $(OBJ)
 	@echo
 	@echo Linking: $@
-	$(CC) -o $@ $(ALL_CFLAGS) $(LDFLAGS) $^
+	$(CC) -o $@ $(ALL_CFLAGS) $^ $(LDFLAGS)
 
 # Compile: create object files from C source files.
 $(OBJDIR)/%.o : %.c
