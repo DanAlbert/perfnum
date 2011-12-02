@@ -37,6 +37,6 @@ int get_packet(int fd, union packet *p) {
 	return read(fd, p, sizeof(union packet));
 }
 
-void send_packet(int fd, union packet *p) {
-	write(fd, p, sizeof(union packet));
+int send_packet(int fd, union packet *p) {
+	return write(fd, p, sizeof(union packet));
 }

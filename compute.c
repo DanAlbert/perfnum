@@ -77,6 +77,7 @@ void pipe_loop(int start, int end);
  * @param n Number to report
  */
 void pipe_report(int n);
+void pipe_cleanup(void);
 
 int sock_init(int argc, char **argv);
 void sock_loop(int fd);
@@ -92,7 +93,10 @@ void sock_cleanup(int fd);
  *
  * @param sig The signal which exited the program
  */
-void quit(int sig);
+void handle_signal(int sig);
+
+/// Global variable to record caught signal so main loop can exit cleanly
+volatile sig_atomic_t exit_status = EXIT_SUCCESS;
 
 int main(int argc, char **argv) {
 	struct shmem_res res;
@@ -108,7 +112,7 @@ int main(int argc, char **argv) {
 	}
 
 	memset(&sigact, 0, sizeof(struct sigaction));
-	sigact.sa_handler = quit;
+	sigact.sa_handler = handle_signal;
 
 	if (sigaction(SIGQUIT, &sigact, NULL) == -1) {
 		perror("Could not set SIGQUIT");
@@ -153,7 +157,7 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	return 0;
+	exit(exit_status);
 }
 
 bool is_perfect_number(unsigned int n) {
@@ -231,6 +235,11 @@ void shmem_loop(struct shmem_res *res) {
 
 	test = next_test(res);
 	while (test != -1) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			break;
+		}
+
 		if (is_perfect_number(test) == true) {
 			if (shmem_report(res, test) == false) {
 				fprintf(stderr, "Could not report perfect number (%d)\n", test);
@@ -271,20 +280,30 @@ bool shmem_report(struct shmem_res *res, int n) {
 }
 
 void pipe_loop(int start, int end) {
-	union packet packet;
+	union packet p;
 
 	assert(start > 0);
 	assert(end > start);
 
 	for (int i = start; i <= end; i++) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			p.id = PACKETID_CLOSED;
+			p.closed.pid = getpid();
+			send_packet(STDOUT_FILENO, &p);
+			break;
+		}
+
 		if (is_perfect_number(i) == true) {
 			pipe_report(i);
 		}
 	}
 
-	packet.id = PACKETID_DONE;
-	packet.done.pid = getpid();
-	send_packet(STDOUT_FILENO, &packet);
+	if (exit_status == EXIT_SUCCESS) {
+		p.id = PACKETID_DONE;
+		p.done.pid = getpid();
+		send_packet(STDOUT_FILENO, &p);
+	}
 }
 
 void pipe_report(int n) {
@@ -294,6 +313,10 @@ void pipe_report(int n) {
 	p.perfnum.perfnum = n;
 
 	send_packet(STDOUT_FILENO, &p);
+}
+
+void pipe_cleanup(void) {
+	close(STDOUT_FILENO);
 }
 
 int sock_init(int argc, char **argv) {
@@ -317,6 +340,11 @@ void sock_loop(int fd) {
 	bool done = false;
 
 	while (done == false) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			break;
+		}
+
 		p.id = PACKETID_DONE;
 		send_packet(fd, &p);
 
@@ -352,9 +380,6 @@ void sock_cleanup(int fd) {
 	close(fd);
 }
 
-void quit(int sig) {
-	fprintf(stderr, "\rClosing\n");
-	close(STDOUT_FILENO);
-	exit(sig);
+void handle_signal(int sig) {
+	exit_status = sig;
 }
-

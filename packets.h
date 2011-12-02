@@ -35,13 +35,20 @@
 enum packet_id {
 	PACKETID_NULL,
 	PACKETID_DONE,
+	PACKETID_CLOSED,
 	PACKETID_RANGE,
 	PACKETID_PERFNUM,
 	PACKETID_NOTIFY,
+	PACKETID_ACCEPT,
 	PACKETID_REFUSE
 };
 
 struct packet_done {
+	enum packet_id packet_id;
+	pid_t pid;
+};
+
+struct packet_closed {
 	enum packet_id packet_id;
 	pid_t pid;
 };
@@ -60,11 +67,12 @@ struct packet_perfnum {
 union packet {
 	enum packet_id id;
 	struct packet_done done;
+	struct packet_closed closed;
 	struct packet_range range;
 	struct packet_perfnum perfnum;
 };
 
 int get_packet(int fd, union packet *p);
-void send_packet(int fd, union packet *p);
+int send_packet(int fd, union packet *p);
 
 #endif // PACKETS_H

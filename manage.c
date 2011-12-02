@@ -41,6 +41,7 @@
 #include <fcntl.h>
 #include <limits.h> // For PIPE_BUF
 #include <math.h> // For floor()
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -62,6 +63,12 @@
 
 /// File path of named pipe for pipe method
 #define FIFO_PATH ".perfect_numbers"
+
+/// Pid file PATH
+#define PID_FILE "manage.pid"
+
+/// Maximum size of the PID string
+#define SPIDSTR 11
 
 /// File mode of named pipe for pipe method
 #define FIFO_MODE (S_IRUSR | S_IWUSR)
@@ -124,7 +131,7 @@ void sock_cleanup(struct sock_res *res);
 void sock_handle_packet(int fd, struct sock_res *res, union packet *p);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
-bool collect_zombies(struct pipe_res *res);
+void collect_computes(struct pipe_res *res);
 
 void *shmem_mount(char *path, int object_size);
 
@@ -132,7 +139,13 @@ void accept_client(struct sock_res *res);
 
 void usage(void);
 
+void handle_signal(int sig);
+
+/// Global variable to record caught signal so main loop can exit cleanly
+volatile sig_atomic_t exit_status = EXIT_SUCCESS;
+
 int main(int argc, char **argv) {
+	struct sigaction sigact;
 	struct pipe_res pipe_res;
 	struct shmem_res shmem_res;
 	struct sock_res sock_res;
@@ -142,12 +155,33 @@ int main(int argc, char **argv) {
 		usage();
 	}
 
+	memset(&sigact, 0, sizeof(struct sigaction));
+	sigact.sa_handler = handle_signal;
+
+	if (sigaction(SIGQUIT, &sigact, NULL) == -1) {
+		perror("Could not set SIGQUIT handler");
+	}
+
+	if (sigaction(SIGHUP, &sigact, NULL) == -1) {
+		perror("Could not set SIGHUP handler");
+	}
+
+	if (sigaction(SIGINT, &sigact, NULL) == -1) {
+		perror("Could not set SIGINT handler");
+	}
+
+	sigact.sa_handler = SIG_IGN;
+	if (sigaction(SIGPIPE, &sigact, NULL) == -1) {
+		perror("Could not set SIGPIPE handler");
+	}
+
 	mode = argv[1][0]; // Only need the first character
 
 	switch (mode) {
 	case 'p':
 		// Pipe stuff
 		if (pipe_init(argc, argv, &pipe_res) == false) {
+			collect_computes(&pipe_res);
 			exit(EXIT_FAILURE);
 		}
 		pipe_report(&pipe_res);
@@ -180,6 +214,9 @@ int main(int argc, char **argv) {
 }
 
 bool pipe_init(int argc, char **argv, struct pipe_res *res) {
+	char pid_str[SPIDSTR];
+	int fd;
+
 	assert(res != NULL);
 
 	if (argc < PIPE_ARGC) {
@@ -198,6 +235,23 @@ bool pipe_init(int argc, char **argv, struct pipe_res *res) {
 		return false;
 	}
 
+	// Create pid file for report
+	fd = open(PID_FILE, O_CREAT | O_TRUNC | O_WRONLY, FIFO_MODE);
+	if (fd == -1) {
+		perror("Could not create pid file");
+		return false;
+	}
+
+	snprintf(pid_str, SPIDSTR, "%d", getpid());
+
+	if (write(fd, pid_str, strlen(pid_str)) == -1) {
+		perror("Unable to write pid file");
+		close(fd);
+		return false;
+	}
+
+	close(fd);
+
 	if (mkfifo(FIFO_PATH, FIFO_MODE) == -1) {
 		perror("Could not make FIFO");
 		return false;
@@ -205,7 +259,12 @@ bool pipe_init(int argc, char **argv, struct pipe_res *res) {
 
 	res->report_fifo = open(FIFO_PATH, O_WRONLY);
 	if (res->report_fifo == -1) {
-		perror("Could not open FIFO");
+		if (errno != EINTR) {
+			perror("Could not open FIFO");
+		} else {
+			fputs("\r", stderr);
+		}
+		unlink(FIFO_PATH);
 		return false;
 	}
 
@@ -216,17 +275,24 @@ void pipe_report(struct pipe_res *res) {
 	union packet packet;
 	int bytes_read;
 	int body_count = 0;
+	bool done = false;
 
 	assert(res != NULL);
 
 	// Loop until signaled to quit
-	while (body_count < res->nprocs) {
+	while (done == false) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			fputs("\r", stderr);
+			break;
+		}
+
 		bytes_read = get_packet(res->compute_pipe[READ], &packet);
 		if (bytes_read == 0) {
 			//break;
 		} else if (bytes_read == -1) {
 			if (errno != EAGAIN) {
-				perror(NULL);
+				perror("Could not read packet");
 			}
 		} else if (bytes_read != sizeof(packet)) {
 			// Did not receive a full packet. Panic?
@@ -236,16 +302,36 @@ void pipe_report(struct pipe_res *res) {
 			switch (packet.id) {
 			case PACKETID_PERFNUM:
 				res->perfnums[res->nperfnums++] = packet.perfnum.perfnum;
-				send_packet(res->report_fifo, &packet);
+				if (send_packet(res->report_fifo, &packet) == -1) {
+					if (errno != EPIPE) {
+						perror("Could not send packet");
+					} else {
+						fprintf(stderr, "Reporting process disconnected\n");
+						done = true;
+					}
+				}
 				break;
+			case PACKETID_CLOSED:
+				// Inform report
+				send_packet(res->report_fifo, &packet);
+				/* no break */
 			case PACKETID_DONE:
-				fprintf(stderr, "[manage] Received done\n");
 				if (waitpid(packet.done.pid, NULL, 0) == -1) {
-					perror(NULL);
+					perror("Could not collect process");
 				} else {
 					body_count++;
+
+					if (body_count == res->nprocs) {
+						done = true;
+					}
+
+					// Mark that the process has exited
+					for (int i = 0; i < res->nprocs; i++) {
+						if (res->compute_pids[i] == packet.done.pid) {
+							res->compute_pids[i] = -1;
+						}
+					}
 				}
-				// TODO: Give it another range
 				break;
 			case PACKETID_NULL:
 			case PACKETID_RANGE:
@@ -264,17 +350,50 @@ void pipe_cleanup(struct pipe_res *res) {
 
 	assert(res != NULL);
 
-	// Inform report that computation is finished
-	packet.id = PACKETID_DONE;
-	packet.done.pid = getpid();
-	send_packet(res->report_fifo, &packet);
+	if (exit_status == EXIT_SUCCESS) {
+		// Inform report that computation is finished
+		packet.id = PACKETID_DONE;
+		packet.done.pid = getpid();
+	} else {
+		// A signal stopped execution
+		packet.id = PACKETID_CLOSED;
+		packet.closed.pid = getpid();
+	}
+	if (send_packet(res->report_fifo, &packet) == -1) {
+		// errno will be EPIPE if report closed before the end of execution
+		if (errno != EPIPE) {
+			perror("Could not send packet");
+		}
+	}
 
 	// Clean up pipes
-	close(res->compute_pipe[READ]);
-	close(res->report_fifo);
+	if (close(res->compute_pipe[READ]) == -1) {
+		perror("Could not close pipe");
+	}
+
+	if (close(res->report_fifo) == -1) {
+		perror("Could not close FIFO");
+	}
+
 	unlink(FIFO_PATH);
 
+	// Kill any other computes
+	for (int i = 0; i < res->nprocs; i++) {
+		if (res->compute_pids[i] != -1) {
+			if (kill(res->compute_pids[i], SIGQUIT) == -1) {
+				perror("Could not kill process");
+			}
+
+			if (waitpid(res->compute_pids[i], NULL, 0) == -1) {
+				perror("Could not collect process");
+			}
+			res->compute_pids[i] = -1;
+		}
+	}
+
 	free(res->compute_pids);
+
+	unlink(PID_FILE);
 }
 
 bool shmem_init(int argc, char **argv, struct shmem_res *res) {
@@ -307,7 +426,7 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	res->addr = shmem_mount(SHMEM_PATH, total_size);
 	res->limit = res->addr;
 	res->bitmap_sem = res->limit + 1;
-	res->bitmap = res->bitmap_sem + 1; // limit is a single integer, so bitmap is one int past
+	res->bitmap = res->bitmap_sem + 1; // limit is a single integer, so bitmap is one int
 	res->perfect_numbers_sem = res->bitmap + bitmap_size;
 	res->perfect_numbers = res->perfect_numbers_sem + 1;
 	res->processes = res->perfect_numbers + NPERFNUMS;
@@ -415,6 +534,12 @@ void sock_report(struct sock_res *res) {
 	int nready;
 
 	while (1) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			fputs("\r", stderr);
+			break;
+		}
+
 		rset = res->allfds;
 		nready = select(res->maxfd+1, &rset, NULL, NULL, NULL);
 
@@ -423,7 +548,7 @@ void sock_report(struct sock_res *res) {
 			accept_client(res);
 
 			if (--nready <= 0) {
-				// No more readable descriptors
+				// No more readable
 				continue;
 			}
 		}
@@ -463,6 +588,22 @@ void sock_report(struct sock_res *res) {
 }
 
 void sock_cleanup(struct sock_res *res) {
+	union packet p;
+
+	p.id = PACKETID_REFUSE;
+	for (int i = 0; i < MAX_CLIENTS; i++) {
+		if (res->clients[i] != -1) {
+			send_packet(res->clients[i], &p);
+			close(res->clients[i]);
+			res->clients[i] = -1;
+		}
+	}
+
+	// Notify was in the above list, already closed
+	res->notify = -1;
+
+	close(res->listen);
+	res->listen = -1;
 }
 
 void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
@@ -479,7 +620,6 @@ void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 
 		break;
 	case PACKETID_DONE:
-		//fprintf(stderr, "[manage] Received done\n");
 		if (res->highest_assigned < res->limit) {
 			outbound.id = PACKETID_RANGE;
 			outbound.range.start = res->highest_assigned + 1;
@@ -610,23 +750,21 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	return 0;
 }
 
-bool collect_zombies(struct pipe_res *res) {
-	pid_t pid = 0;
-	static int body_count = 0;
+void collect_computes(struct pipe_res *res) {
+	// Kill any other computes
+	for (int i = 0; i < res->nprocs; i++) {
+		if (res->compute_pids[i] != -1) {
+			if (kill(res->compute_pids[i], SIGQUIT) == -1) {
+				perror("Could not kill process");
+			}
 
-	while ((pid > 0) && (body_count < res->nprocs)) {
-		pid = waitpid(-1, NULL, WNOHANG);
-		if (pid == 0) {
-			// Nothing has exited
-		} else if (pid == -1) {
-			perror("manage");
-		} else {
-			// Zombie neutralized
-			body_count++;
+			if (waitpid(res->compute_pids[i], NULL, 0) == -1) {
+				perror("Could not collect process");
+			}
+
+			res->compute_pids[i] = -1;
 		}
-	};
-
-	return body_count == res->nprocs;
+	}
 }
 
 void *shmem_mount(char *path, int object_size) {
@@ -703,9 +841,14 @@ void usage(void) {
 	fprintf(stdout, "        nprocs:     number of compute processes to spawn\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "    s - sockets\n");
-	fprintf(stdout, "        usage: manage s <sock args>\n");
+	fprintf(stdout, "        usage: manage s <limit>\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "        limit:      largest number to test\n");
 	fprintf(stdout, "\n");
 
 	exit(EXIT_FAILURE);
 }
 
+void handle_signal(int sig) {
+	exit_status = sig;
+}

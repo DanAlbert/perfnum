@@ -48,8 +48,14 @@
 /// File path of named pipe for pipe method
 #define FIFO_PATH ".perfect_numbers"
 
-int pipe_init(void);
-void pipe_report(int fd);
+/// Pid file PATH
+#define PID_FILE "manage.pid"
+
+/// Maximum size of the PID string
+#define SPIDSTR 11
+
+int pipe_init(pid_t *manage);
+void pipe_report(int fd, pid_t manage);
 void pipe_cleanup(int fd);
 
 void kill_processes(void);
@@ -57,17 +63,41 @@ void kill_processes(void);
 void shmem_report(struct shmem_res *res);
 
 int sock_init(int argc, char **argv);
+void sock_report(int fd);
+void sock_cleanup(int fd);
 
 int next_test(struct shmem_res *res);
 
+void handle_signal(int sig);
+
+/// Global variable to record caught signal so main loop can exit cleanly
+volatile sig_atomic_t exit_status = EXIT_SUCCESS;
+
 int main(int argc, char **argv) {
+	struct sigaction sigact;
 	struct shmem_res res;
 	int fd;
+	pid_t manage;
 	char mode;
 
 	if (argc < 2) {
 		printf("Mode not supplied\n");
 		exit(EXIT_FAILURE);
+	}
+
+	memset(&sigact, 0, sizeof(struct sigaction));
+	sigact.sa_handler = handle_signal;
+
+	if (sigaction(SIGQUIT, &sigact, NULL) == -1) {
+		perror("Could not set SIGQUIT");
+	}
+
+	if (sigaction(SIGHUP, &sigact, NULL) == -1) {
+		perror("Could not set SIGHUP");
+	}
+
+	if (sigaction(SIGINT, &sigact, NULL) == -1) {
+		perror("Could not set SIGINT");
 	}
 
 	mode = argv[1][0]; // Mode is first char
@@ -80,12 +110,11 @@ int main(int argc, char **argv) {
 		shmem_report(&res);
 		break;
 	case 'p':
-		fd = pipe_init();
+		fd = pipe_init(&manage);
 		if (fd == -1) {
-			fprintf(stderr, "Could not initialize pipes");
 			exit(EXIT_FAILURE);
 		}
-		pipe_report(fd);
+		pipe_report(fd, manage);
 		pipe_cleanup(fd);
 		break;
 	case 's':
@@ -109,22 +138,49 @@ int main(int argc, char **argv) {
 	exit(EXIT_SUCCESS);
 }
 
-int pipe_init(void) {
-	return open(FIFO_PATH, O_RDONLY);
+int pipe_init(pid_t *manage) {
+	int fd;
+	char pid_str[SPIDSTR];
+	bool first = true;
+
+	fd = open(PID_FILE, O_RDONLY);
+	if (fd == -1) {
+		perror("Could not open pid file");
+		return -1;
+	}
+
+	if (read(fd, pid_str, SPIDSTR) == -1) {
+		perror("Could not read PID");
+		return -1;
+	}
+
+	*manage = atoi(pid_str);
+
+	fd = open(FIFO_PATH, O_RDONLY);
+	if (fd == -1) {
+		perror("Could not open FIFO");
+		return -1;
+	}
+
+	return fd;
 }
 
-void pipe_report(int fd) {
+void pipe_report(int fd, pid_t manage) {
 	union packet packet;
 	ssize_t chars_read;
 	bool done = false;
 
 	while (done == false) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			fputs("\r", stderr);
+			break;
+		}
+
 		chars_read = get_packet(fd, &packet);
-		if (chars_read == 0) {
-			//break;
-		} else if (chars_read == -1) {
-			if (errno != EAGAIN) {
-				perror(NULL);
+		if (chars_read == -1) {
+			if ((errno != EAGAIN) && (errno != EINTR)) {
+				perror("Could not read packet");
 			}
 		}
 
@@ -134,9 +190,18 @@ void pipe_report(int fd) {
 				printf("%d\n", packet.perfnum.perfnum);
 				break;
 			case PACKETID_DONE:
-				printf("Computation complete. Killing processes...\n");
+				printf("Computation complete\n");
 				kill_processes();
 				done = true;
+				break;
+			case PACKETID_CLOSED:
+				if (packet.closed.pid == manage) {
+					printf("Manage was shut down before execution could complete\n");
+					done = true;
+				} else {
+					printf("A compute process exited prematurely. ");
+					printf("Perfect numbers may be missed.\n");
+				}
 				break;
 			case PACKETID_NULL:
 			case PACKETID_RANGE:
@@ -217,6 +282,12 @@ void sock_report(int fd) {
 	bool done = false;
 
 	while (done == false) {
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			fputs("\r", stderr);
+			break;
+		}
+
 		bytes_read = get_packet(fd, &p);
 		if (bytes_read > 0) {
 			switch (p.id) {
@@ -227,10 +298,13 @@ void sock_report(int fd) {
 				printf("Computation complete\n");
 				done = true;
 				break;
+			case PACKETID_REFUSE:
+				printf("Manage was shut down before execution could complete\n");
+				done = true;
+				break;
 			case PACKETID_NULL:
 			case PACKETID_RANGE:
 			case PACKETID_NOTIFY:
-			case PACKETID_REFUSE:
 				fprintf(stderr, "Invalid packet: %#02x\n", p.id);
 				break;
 			default:
@@ -262,3 +336,6 @@ int next_test(struct shmem_res *res) {
 	return -1;
 }
 
+void handle_signal(int sig) {
+	exit_status = sig;
+}
