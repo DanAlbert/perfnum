@@ -58,7 +58,7 @@ int pipe_init(pid_t *manage);
 void pipe_report(int fd, pid_t manage);
 void pipe_cleanup(int fd);
 
-void kill_processes(void);
+int load_pid_file(char *path);
 
 void shmem_report(struct shmem_res *res);
 
@@ -127,9 +127,16 @@ int main(int argc, char **argv) {
 		break;
 	case 'k':
 		// Signal manage to shutdown computation
-		printf("Kill not implemented\n");
-		kill_processes();
-		exit(EXIT_FAILURE);
+		manage = load_pid_file(PID_FILE);
+		if (manage != -1) {
+			if (kill(manage, SIGQUIT) == -1) {
+				perror("Could not shut down computation");
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			printf("Managing process not running\n");
+		}
+		break;
 	default:
 		printf("Invalid mode\n");
 		exit(EXIT_FAILURE);
@@ -140,21 +147,12 @@ int main(int argc, char **argv) {
 
 int pipe_init(pid_t *manage) {
 	int fd;
-	char pid_str[SPIDSTR];
-	bool first = true;
 
-	fd = open(PID_FILE, O_RDONLY);
-	if (fd == -1) {
-		perror("Could not open pid file");
+	*manage = load_pid_file(PID_FILE);
+	if (*manage == -1) {
+		perror("Could not load pid file");
 		return -1;
 	}
-
-	if (read(fd, pid_str, SPIDSTR) == -1) {
-		perror("Could not read PID");
-		return -1;
-	}
-
-	*manage = atoi(pid_str);
 
 	fd = open(FIFO_PATH, O_RDONLY);
 	if (fd == -1) {
@@ -191,7 +189,6 @@ void pipe_report(int fd, pid_t manage) {
 				break;
 			case PACKETID_DONE:
 				printf("Computation complete\n");
-				kill_processes();
 				done = true;
 				break;
 			case PACKETID_CLOSED:
@@ -219,7 +216,22 @@ void pipe_cleanup(int fd) {
 	close(fd);
 }
 
-void kill_processes(void) {
+int load_pid_file(char *path) {
+	char pid_str[SPIDSTR];
+	int fd;
+
+	assert(path != NULL);
+
+	fd = open(path, O_RDONLY);
+	if (fd == -1) {
+		return -1;
+	}
+
+	if (read(fd, pid_str, SPIDSTR) == -1) {
+		return -1;
+	}
+
+	return atoi(pid_str);
 }
 
 void shmem_report(struct shmem_res *res) {
