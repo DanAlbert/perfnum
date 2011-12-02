@@ -240,17 +240,17 @@ void shmem_loop(struct shmem_res *res) {
 
 	test = next_test(res);
 	while (test != -1) {
-		// Check to see if a signal was caught
-		if (exit_status != EXIT_SUCCESS) {
-			break;
-		}
-
 		if (is_perfect_number(test) == true) {
 			if (shmem_report(res, test) == false) {
 				fprintf(stderr, "Could not report perfect number (%d)\n", test);
 			}
 		}
 
+		// Check to see if a signal was caught
+		if (exit_status != EXIT_SUCCESS) {
+			fputs("\r", stderr);
+			break;
+		}
 		test = next_test(res);
 	}
 }

@@ -452,8 +452,6 @@ void shmem_cleanup(void) {
 
 	if (shmem_load(&res) == false) {
 		return;
-
-		bool all_tested(struct shmem_res *res);
 	}
 
 	while (sem_destroy(res.bitmap_sem) == -1) {
