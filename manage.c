@@ -116,6 +116,7 @@ struct sock_res {
 	fd_set allfds;
 	int maxfd;
 	int maxi;
+	bool missed_some;
 };
 
 bool pipe_init(int argc, char **argv, struct pipe_res *res);
@@ -480,6 +481,7 @@ void shmem_cleanup(void) {
 
 bool sock_init(int argc, char **argv, struct sock_res *res) {
 	struct sockaddr_in servaddr;
+	int on = 1; // For setsockopt()
 
 	assert(res != NULL);
 
@@ -491,6 +493,15 @@ bool sock_init(int argc, char **argv, struct sock_res *res) {
 	if (res->listen == -1) {
 		perror("Could not create socket");
 		return false;
+	}
+
+	if (setsockopt(
+			res->listen,
+			SOL_SOCKET,
+			SO_REUSEADDR,
+			(char *)&on,
+			sizeof(on)) == -1) {
+		perror("Could not set SO_REUSEADDR");
 	}
 
 	memset(&servaddr, 0, sizeof(servaddr));
@@ -514,6 +525,7 @@ bool sock_init(int argc, char **argv, struct sock_res *res) {
 	res->done = false;
 	res->maxfd = res->listen;
 	res->maxi = -1;
+	res->missed_some = false;
 
 	for (int i = 0; i < MAX_CLIENTS; i++) {
 		res->clients[i] = -1; // Denotes an unused index
@@ -542,6 +554,14 @@ void sock_report(struct sock_res *res) {
 
 		rset = res->allfds;
 		nready = select(res->maxfd+1, &rset, NULL, NULL, NULL);
+		if (nready == -1) {
+			if (errno != EINTR) {
+				perror("Select failed");
+			} else {
+				fputs("\r", stderr);
+				break;
+			}
+		}
 
 		if (FD_ISSET(res->listen, &rset)) {
 			// New client connection
@@ -574,6 +594,8 @@ void sock_report(struct sock_res *res) {
 				} else if (bytes_read != sizeof(packet)) {
 					// Did not receive a full packet. Panic?
 					fprintf(stderr, "Did not receive a full packet\n");
+				} else if (bytes_read == -1) {
+					perror("Could not read packet");
 				} else {
 					sock_handle_packet(fd, res, &packet);
 				}
@@ -590,7 +612,8 @@ void sock_report(struct sock_res *res) {
 void sock_cleanup(struct sock_res *res) {
 	union packet p;
 
-	p.id = PACKETID_REFUSE;
+	p.id = PACKETID_CLOSED;
+	p.closed.pid = PID_SERVER;
 	for (int i = 0; i < MAX_CLIENTS; i++) {
 		if (res->clients[i] != -1) {
 			send_packet(res->clients[i], &p);
@@ -637,10 +660,28 @@ void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 			}
 		}
 		break;
+	case PACKETID_CLOSED:
+		res->missed_some = true;
+
+		// Inform report
+		if (res->notify != -1) {
+			send_packet(res->notify, p);
+		}
+		break;
 	case PACKETID_NOTIFY:
 		if (res->notify == -1) {
 			// No client currently registered to notify, allow
 			res->notify = fd;
+
+			// Inform the client that is has been registered
+			outbound.id = PACKETID_ACCEPT;
+			send_packet(fd, &outbound);
+
+			if (res->missed_some == true) {
+				outbound.id = PACKETID_CLOSED;
+				outbound.closed.pid = PID_CLIENT;
+				send_packet(fd, &outbound);
+			}
 
 			// Send list of numbers already found
 			outbound.id = PACKETID_PERFNUM;

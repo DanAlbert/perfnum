@@ -272,20 +272,23 @@ int sock_init(int argc, char **argv) {
 	send_packet(fd, &p);
 
 	get_packet(fd ,&p);
-	if (p.id == PACKETID_REFUSE) {
+	if (p.id == PACKETID_ACCEPT) {
+		return fd;
+	} else if (p.id == PACKETID_REFUSE) {
 		fprintf(stderr, "A client is already registered to be notified by the server\n");
 
 		// Disconnect
 		close(fd);
 
 		return -1;
-	} else if (p.id == PACKETID_PERFNUM) {
-		printf("%d\n", p.perfnum.perfnum);
 	} else {
 		fprintf(stderr, "Invalid or unknown packet (%d)\n", p.id);
-	}
 
-	return fd;
+		// Disconnect
+		close(fd);
+
+		return -1;
+	}
 }
 
 void sock_report(int fd) {
@@ -310,9 +313,14 @@ void sock_report(int fd) {
 				printf("Computation complete\n");
 				done = true;
 				break;
-			case PACKETID_REFUSE:
-				printf("Manage was shut down before execution could complete\n");
-				done = true;
+			case PACKETID_CLOSED:
+				if (p.closed.pid == PID_SERVER) {
+					printf("Manage was shut down before execution could complete\n");
+					done = true;
+				} else {
+					printf("A compute process exited prematurely. ");
+					printf("Perfect numbers may be missed.\n");
+				}
 				break;
 			case PACKETID_NULL:
 			case PACKETID_RANGE:

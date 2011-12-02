@@ -126,6 +126,11 @@ int main(int argc, char **argv) {
 		perror("Could not set SIGINT");
 	}
 
+	sigact.sa_handler = SIG_IGN;
+	if (sigaction(SIGPIPE, &sigact, NULL) == -1) {
+		perror("Could not set SIGPIPE handler");
+	}
+
 	mode = argv[1][0]; // The first character is the mode
 
 	switch (mode) {
@@ -342,6 +347,7 @@ void sock_loop(int fd) {
 	while (done == false) {
 		// Check to see if a signal was caught
 		if (exit_status != EXIT_SUCCESS) {
+			fputs("\r", stderr);
 			break;
 		}
 
@@ -351,11 +357,23 @@ void sock_loop(int fd) {
 		get_packet(fd, &p);
 
 		switch (p.id) {
+		case PACKETID_CLOSED:
+			printf("The server has closed the connection\n");
+			done = true;
+			break;
 		case PACKETID_REFUSE:
 			done = true;
 			break;
 		case PACKETID_RANGE:
 			for (int i = p.range.start; i <= p.range.end; i++) {
+				// Check to see if a signal was caught
+				if (exit_status != EXIT_SUCCESS) {
+					fputs("\r", stderr);
+					p.id = PACKETID_CLOSED;
+					p.closed.pid = PID_CLIENT;
+					send_packet(fd, &p);
+					break;
+				}
 				if (is_perfect_number(i) == true) {
 					sock_report(fd, i);
 				}

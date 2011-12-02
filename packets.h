@@ -32,6 +32,12 @@
 
 #include <unistd.h>
 
+/// Server "pid" for closed packets in socket mode
+#define PID_SERVER ((pid_t)0)
+
+/// Client "pid" for closed packets in socket mode
+#define PID_CLIENT ((pid_t)1)
+
 enum packet_id {
 	PACKETID_NULL,
 	PACKETID_DONE,
