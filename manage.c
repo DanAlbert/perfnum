@@ -129,7 +129,7 @@ void shmem_cleanup(void);
 bool sock_init(int argc, char **argv, struct sock_res *res);
 void sock_report(struct sock_res *res);
 void sock_cleanup(struct sock_res *res);
-void sock_handle_packet(int fd, struct sock_res *res, union packet *p);
+bool sock_handle_packet(int fd, struct sock_res *res, union packet *p);
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
 void collect_computes(struct pipe_res *res);
@@ -539,11 +539,12 @@ void sock_report(struct sock_res *res) {
 	union packet packet;
 	int fd;
 	int bytes_read;
+	bool done;
 
 	fd_set rset;
 	int nready;
 
-	while (1) {
+	while (done == false) {
 		// Check to see if a signal was caught
 		if (exit_status != EXIT_SUCCESS) {
 			fputs("\r", stderr);
@@ -595,7 +596,7 @@ void sock_report(struct sock_res *res) {
 				} else if (bytes_read == -1) {
 					perror("Could not read packet");
 				} else {
-					sock_handle_packet(fd, res, &packet);
+					done = sock_handle_packet(fd, res, &packet);
 				}
 
 				if (--nready <= 0) {
@@ -627,7 +628,7 @@ void sock_cleanup(struct sock_res *res) {
 	res->listen = -1;
 }
 
-void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
+bool sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 	union packet outbound;
 
 	switch (p->id) {
@@ -665,6 +666,11 @@ void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 		if (res->notify != -1) {
 			send_packet(res->notify, p);
 		}
+		break;
+	case PACKETID_KILL:
+		printf("Received shut down signal\n");
+		// Break the loop
+		return true;
 		break;
 	case PACKETID_NOTIFY:
 		if (res->notify == -1) {
@@ -706,6 +712,8 @@ void sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 		fprintf(stderr, "[manage] Unrecognized packet: %#02x\n", p->id);
 		break;
 	}
+
+	return false;
 }
 
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {

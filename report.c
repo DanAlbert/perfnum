@@ -43,6 +43,12 @@
 #include "sock.h"
 
 /// Number of arguments required for sockets method
+#define PIPE_ARGC 2
+
+/// Number of arguments required for sockets method
+#define SHMEM_ARGC 2
+
+/// Number of arguments required for sockets method
 #define SOCK_ARGC 3
 
 /// File path of named pipe for pipe method
@@ -54,17 +60,22 @@
 /// Maximum size of the PID string
 #define SPIDSTR 11
 
+bool check_kill(int argc, char **argv, char mode);
+
 int pipe_init(pid_t *manage);
 void pipe_report(int fd, pid_t manage);
 void pipe_cleanup(int fd);
+bool pipe_kill(void);
 
 int load_pid_file(char *path);
 
 void shmem_report(struct shmem_res *res);
+bool shmem_kill(void);
 
 int sock_init(int argc, char **argv);
 void sock_report(int fd);
 void sock_cleanup(int fd);
+bool sock_kill(int fd);
 
 int next_test(struct shmem_res *res);
 
@@ -110,31 +121,32 @@ int main(int argc, char **argv) {
 		shmem_report(&res);
 		break;
 	case 'p':
-		fd = pipe_init(&manage);
-		if (fd == -1) {
-			exit(EXIT_FAILURE);
+		if (check_kill(argc, argv, mode)) {
+			if (pipe_kill() == false) {
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			fd = pipe_init(&manage);
+			if (fd == -1) {
+				exit(EXIT_FAILURE);
+			}
+			pipe_report(fd, manage);
+			pipe_cleanup(fd);
 		}
-		pipe_report(fd, manage);
-		pipe_cleanup(fd);
 		break;
 	case 's':
 		fd = sock_init(argc, argv);
 		if (fd == -1) {
 			exit(EXIT_FAILURE);
 		}
-		sock_report(fd);
-		sock_cleanup(fd);
-		break;
-	case 'k':
-		// Signal manage to shutdown computation
-		manage = load_pid_file(PID_FILE);
-		if (manage != -1) {
-			if (kill(manage, SIGQUIT) == -1) {
-				perror("Could not shut down computation");
+
+		if (check_kill(argc, argv, mode)) {
+			if (sock_kill(fd) == false) {
 				exit(EXIT_FAILURE);
 			}
 		} else {
-			printf("Managing process not running\n");
+			sock_report(fd);
+			sock_cleanup(fd);
 		}
 		break;
 	default:
@@ -143,6 +155,34 @@ int main(int argc, char **argv) {
 	}
 
 	exit(EXIT_SUCCESS);
+}
+
+bool check_kill(int argc, char **argv, char mode) {
+	switch (mode) {
+	case 'm':
+		if (argc > SHMEM_ARGC) {
+			if (strcmp(argv[SHMEM_ARGC], "-k") == 0) {
+				return true;
+			}
+		}
+		break;
+	case 'p':
+		if (argc > PIPE_ARGC) {
+			if (strcmp(argv[PIPE_ARGC], "-k") == 0) {
+				return true;
+			}
+		}
+		break;
+	case 's':
+		if (argc > SOCK_ARGC) {
+			if (strcmp(argv[SOCK_ARGC], "-k") == 0) {
+				return true;
+			}
+		}
+		break;
+	}
+
+	return false;
 }
 
 int pipe_init(pid_t *manage) {
@@ -216,6 +256,24 @@ void pipe_cleanup(int fd) {
 	close(fd);
 }
 
+bool pipe_kill(void) {
+	pid_t manage;
+
+	// Signal manage to shutdown computation
+	manage = load_pid_file(PID_FILE);
+	if (manage != -1) {
+		if (kill(manage, SIGQUIT) == -1) {
+			perror("Could not shut down computation");
+			return false;
+		}
+	} else {
+		printf("Managing process not running\n");
+		return false;
+	}
+
+	return true;
+}
+
 int load_pid_file(char *path) {
 	char pid_str[SPIDSTR];
 	int fd;
@@ -252,6 +310,10 @@ void shmem_report(struct shmem_res *res) {
 	} else {
 		printf("Next untested integer: %d\n", next);
 	}
+}
+
+bool shmem_kill(void) {
+	return false;
 }
 
 int sock_init(int argc, char **argv) {
@@ -337,6 +399,18 @@ void sock_report(int fd) {
 
 void sock_cleanup(int fd) {
 	close(fd);
+}
+
+bool sock_kill(int fd) {
+	union packet p;
+
+	p.id = PACKETID_KILL;
+	if (send_packet(fd, &p) == -1) {
+		perror("Could not kill server");
+		return false;
+	}
+
+	return true;
 }
 
 int next_test(struct shmem_res *res) {
