@@ -57,7 +57,6 @@ struct process {
 	pid_t pid;
 	int found;
 	int tested;
-	int untested;
 };
 
 struct shmem_res {

@@ -245,6 +245,7 @@ void shmem_loop(struct shmem_res *res) {
 			p->pid = getpid();
 			p->found = 0;
 			p->tested = 0;
+
 			set = true;
 			break;
 		}

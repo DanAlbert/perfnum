@@ -331,7 +331,7 @@ void shmem_report(struct shmem_res *res) {
 	if (next == -1) {
 		printf("\nTesting complete\n");
 	} else {
-		printf("\n%d tested\n", total);
+		printf("\n%d tested, %d remaining\n", total, *res->limit - total);
 		printf("Next untested integer: %d\n", next);
 	}
 }
