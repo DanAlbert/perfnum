@@ -736,7 +736,6 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 		// End is stored from previous loop
 		start = end + 1;
 
-		void shmem_report(struct shmem_res *res);
 		// Weight the extra numbers to the front (started first, fastest check)
 		if (i == 0)
 		{
@@ -754,7 +753,6 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 			(*pids)[i] = pid;
 		} else if (pid == 0) {
 			// Child
-			void shmem_report(struct shmem_res *res);
 
 			// Duplicate write end of pipe to stdout
 			if (dup2(fds[WRITE], STDOUT_FILENO) == -1) {
