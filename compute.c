@@ -243,6 +243,8 @@ void shmem_loop(struct shmem_res *res) {
 	for (p = res->processes; p < res->end; p++) {
 		if (p->pid == -1) {
 			p->pid = getpid();
+			p->found = 0;
+			p->tested = 0;
 			set = true;
 			break;
 		}
@@ -256,10 +258,13 @@ void shmem_loop(struct shmem_res *res) {
 	test = next_test(res);
 	while (test != -1) {
 		if (is_perfect_number(test) == true) {
+			p->found++;
 			if (shmem_report(res, test) == false) {
 				fprintf(stderr, "Could not report perfect number (%d)\n", test);
 			}
 		}
+
+		p->tested++;
 
 		// Check to see if a signal was caught
 		if (exit_status != EXIT_SUCCESS) {

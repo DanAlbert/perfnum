@@ -301,21 +301,37 @@ int load_pid_file(char *path) {
 }
 
 void shmem_report(struct shmem_res *res) {
+	int total = 0;
 	int next;
+	bool first_proc = true;
 
 	assert(res != NULL);
 
+	printf("Perfect numbers:\n");
 	for (int i = 0; i < NPERFNUMS; i++) {
 		if (res->perfect_numbers[i] != 0) {
 			printf("%d\n", res->perfect_numbers[i]);
 		}
 	}
 
+	for (struct process *p = res->processes; p < res->end; p++) {
+		if (p->pid != -1) {
+			if (first_proc == true) {
+				printf("\nProcesses:\n");
+				first_proc = false;
+			}
+
+			printf("compute (%d): tested %d, found %d\n", p->pid, p->tested, p->found);
+			total += p->tested;
+		}
+	}
+
 	next = next_test(res);
 
 	if (next == -1) {
-		printf("Testing complete\n");
+		printf("\nTesting complete\n");
 	} else {
+		printf("\n%d tested\n", total);
 		printf("Next untested integer: %d\n", next);
 	}
 }
