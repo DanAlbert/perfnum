@@ -2,8 +2,8 @@
  * @file manage.c
  * @author Dan Albert
  * @date Created 11/05/2011
- * @date Last updated 11/23/2011
- * @version 0.1
+ * @date Last updated 12/04/2011
+ * @version 1.0
  *
  * @section LICENSE
  *
@@ -319,7 +319,7 @@ void pipe_report(struct pipe_res *res) {
 			case PACKETID_CLOSED:
 				// Inform report
 				send_packet(res->report_fifo, &packet);
-				/* no break */
+				// No break
 			case PACKETID_DONE:
 				if (waitpid(packet.done.pid, NULL, 0) == -1) {
 					perror("Could not collect process");
@@ -910,3 +910,4 @@ void usage(void) {
 void handle_signal(int sig) {
 	exit_status = sig;
 }
+

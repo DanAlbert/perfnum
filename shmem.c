@@ -2,8 +2,8 @@
  * @file shmem.c
  * @author Dan Albert
  * @date Created 11/23/2011
- * @date Last updated 11/23/2011
- * @version 0.1
+ * @date Last updated 12/04/2011
+ * @version 1.0
  *
  * @section LICENSE
  *
@@ -87,3 +87,4 @@ bool shmem_load(struct shmem_res *res) {
 
 	return true;
 }
+

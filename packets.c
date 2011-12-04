@@ -2,8 +2,8 @@
  * @file packets.c
  * @author Dan Albert
  * @date Created 11/30/2011
- * @date Last updated 11/30/2011
- * @version 0.1
+ * @date Last updated 12/04/2011
+ * @version 1.0
  *
  * @section LICENSE
  *
@@ -40,3 +40,4 @@ int get_packet(int fd, union packet *p) {
 int send_packet(int fd, union packet *p) {
 	return write(fd, p, sizeof(union packet));
 }
+

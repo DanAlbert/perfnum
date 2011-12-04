@@ -2,8 +2,8 @@
  * @file report.c
  * @author Dan Albert
  * @date Created 11/05/2011
- * @date Last updated 11/23/2011
- * @version 0.1
+ * @date Last updated 12/04/2011
+ * @version 1.0
  *
  * @section LICENSE
  *
@@ -80,6 +80,8 @@ bool sock_kill(int fd);
 int next_test(struct shmem_res *res);
 
 void handle_signal(int sig);
+
+void usage(void);
 
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
@@ -483,3 +485,4 @@ void usage(void) {
 	printf("\n");
 	exit(EXIT_FAILURE);
 }
+

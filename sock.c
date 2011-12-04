@@ -2,8 +2,8 @@
  * @file sock.c
  * @author Dan Albert
  * @date Created 11/30/2011
- * @date Last updated 11/30/2011
- * @version 0.1
+ * @date Last updated 12/04/2011
+ * @version 1.0
  *
  * @section LICENSE
  *
@@ -52,3 +52,4 @@ int sock_connect(char *host) {
 
 	return fd;
 }
+
