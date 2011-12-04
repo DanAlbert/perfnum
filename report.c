@@ -70,7 +70,7 @@ bool pipe_kill(void);
 int load_pid_file(char *path);
 
 void shmem_report(struct shmem_res *res);
-bool shmem_kill(void);
+bool shmem_kill(struct shmem_res *res);
 
 int sock_init(int argc, char **argv);
 void sock_report(int fd);
@@ -118,7 +118,14 @@ int main(int argc, char **argv) {
 		if (shmem_load(&res) == false) {
 			exit(EXIT_FAILURE);
 		}
-		shmem_report(&res);
+
+		if (check_kill(argc, argv, mode)) {
+			if (shmem_kill(&res) == false) {
+				exit(EXIT_FAILURE);
+			}
+		} else {
+			shmem_report(&res);
+		}
 		break;
 	case 'p':
 		if (check_kill(argc, argv, mode)) {
@@ -142,6 +149,7 @@ int main(int argc, char **argv) {
 
 		if (check_kill(argc, argv, mode)) {
 			if (sock_kill(fd) == false) {
+				sock_cleanup(fd);
 				exit(EXIT_FAILURE);
 			}
 		} else {
@@ -312,8 +320,13 @@ void shmem_report(struct shmem_res *res) {
 	}
 }
 
-bool shmem_kill(void) {
-	return false;
+bool shmem_kill(struct shmem_res *res) {
+	if (kill(*res->manage, SIGQUIT) == -1) {
+		perror("Could not kill manage");
+		return false;
+	}
+
+	return true;
 }
 
 int sock_init(int argc, char **argv) {

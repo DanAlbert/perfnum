@@ -234,9 +234,24 @@ int next_test(struct shmem_res *res) {
 }
 
 void shmem_loop(struct shmem_res *res) {
+	struct process *p;
 	int test;
+	bool set = false;
 
 	assert(res != NULL);
+
+	for (p = res->processes; p < res->end; p++) {
+		if (p->pid == -1) {
+			p->pid = getpid();
+			set = true;
+			break;
+		}
+	}
+
+	if (set == false) {
+		fprintf(stderr, "Too many processes already\n");
+		return;
+	}
 
 	test = next_test(res);
 	while (test != -1) {
@@ -253,6 +268,9 @@ void shmem_loop(struct shmem_res *res) {
 		}
 		test = next_test(res);
 	}
+
+	// Remove self from process list
+	p->pid = -1;
 }
 
 bool shmem_report(struct shmem_res *res, int n) {

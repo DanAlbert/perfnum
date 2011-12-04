@@ -63,11 +63,13 @@ struct process {
 struct shmem_res {
 	void *addr;
 	int *limit;
+	pid_t *manage;
 	sem_t *bitmap_sem;
 	uint8_t *bitmap;
 	sem_t *perfect_numbers_sem;
 	int *perfect_numbers;
 	struct process *processes;
+	void *end;
 };
 
 bool shmem_load(struct shmem_res *res);

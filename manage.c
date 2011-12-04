@@ -124,7 +124,7 @@ void pipe_report(struct pipe_res *res);
 void pipe_cleanup(struct pipe_res *res);
 
 bool shmem_init(int argc, char **argv, struct shmem_res *res);
-void shmem_cleanup(void);
+void shmem_cleanup(struct shmem_res *res);
 
 bool sock_init(int argc, char **argv, struct sock_res *res);
 void sock_report(struct sock_res *res);
@@ -193,10 +193,14 @@ int main(int argc, char **argv) {
 		if (shmem_init(argc, argv, &shmem_res) == false) {
 			exit(EXIT_FAILURE);
 		}
-		break;
-	case 'c':
-		// Clean shmem
-		shmem_cleanup();
+		while (1) {
+			// Loop until signalled to shut down
+			if (exit_status != EXIT_SUCCESS) {
+				fputs("\r", stderr);
+				break;
+			}
+		}
+		shmem_cleanup(&shmem_res);
 		break;
 	case 's':
 		// Socket stuff
@@ -415,7 +419,7 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	bitmap_size = limit / 8 + 1;
 	perfnums_size = NPERFNUMS * sizeof(int);
 	processes_size = NPROCS * sizeof(struct process);
-	total_size = sizeof(int) + (2 * sizeof(sem_t)) + bitmap_size + perfnums_size + processes_size;
+	total_size = sizeof(pid_t) + sizeof(int) + (2 * sizeof(sem_t)) + bitmap_size + perfnums_size + processes_size;
 
 	if (shm_unlink(SHMEM_PATH) == -1) {
 		if (errno != ENOENT) {
@@ -426,13 +430,16 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 
 	res->addr = shmem_mount(SHMEM_PATH, total_size);
 	res->limit = res->addr;
-	res->bitmap_sem = res->limit + 1;
+	res->manage = res->limit + 1;
+	res->bitmap_sem = res->manage + 1;
 	res->bitmap = res->bitmap_sem + 1; // limit is a single integer, so bitmap is one int
 	res->perfect_numbers_sem = res->bitmap + bitmap_size;
 	res->perfect_numbers = res->perfect_numbers_sem + 1;
 	res->processes = res->perfect_numbers + NPERFNUMS;
+	res->end = res->processes + NPROCS;
 
 	*res->limit = limit; // Set the limit in shared memory so other processes know
+	*res->manage = getpid(); // Set PID in shared memory so report knows what to kill
 
 	if (sem_init(res->bitmap_sem, 1, 1) == -1) {
 		perror("Could not initialize semaphore");
@@ -444,17 +451,26 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 		return false;
 	}
 
+	// Mark all process slots as unused
+	for (struct process *p = res->processes; p < res->end; p++) {
+		p->pid = -1;
+	}
+
 	return true;
 }
 
-void shmem_cleanup(void) {
-	struct shmem_res res;
-
-	if (shmem_load(&res) == false) {
-		return;
+void shmem_cleanup(struct shmem_res *res) {
+	for (struct process *p = res->processes; p < res->end; p++) {
+		if (p->pid != -1) {
+			if (kill(p->pid, SIGQUIT) == -1) {
+				perror("Could not kill compute");
+			} else {
+				p->pid = -1;
+			}
+		}
 	}
 
-	while (sem_destroy(res.bitmap_sem) == -1) {
+	while (sem_destroy(res->bitmap_sem) == -1) {
 		if (errno == EINVAL) {
 			break;
 		}
@@ -462,7 +478,7 @@ void shmem_cleanup(void) {
 		// Else something is currently blocking on the semaphore, keep up the attack
 	}
 
-	while (sem_destroy(res.perfect_numbers_sem) == -1) {
+	while (sem_destroy(res->perfect_numbers_sem) == -1) {
 		if (errno == EINVAL) {
 			break;
 		}
