@@ -107,8 +107,7 @@ int main(int argc, char **argv) {
 	int end;
 	
 	if (argc < 2) {
-		printf("No mode specified");
-		exit(EXIT_FAILURE);
+		usage();
 	}
 
 	memset(&sigact, 0, sizeof(struct sigaction));
@@ -142,8 +141,7 @@ int main(int argc, char **argv) {
 		break;
 	case 'p':
 		if (argc < PIPE_ARGC) {
-			printf("Test limits not specified.\n");
-			exit(EXIT_FAILURE);
+			usage();
 		}
 		start = atoi(argv[2]);
 		end = atoi(argv[3]);
@@ -158,8 +156,8 @@ int main(int argc, char **argv) {
 		sock_cleanup(fd);
 		break;
 	default:
-		fprintf(stderr, "Unknown mode\n");
-		exit(EXIT_FAILURE);
+		usage();
+		break;
 	}
 
 	exit(exit_status);
@@ -352,7 +350,7 @@ int sock_init(int argc, char **argv) {
 	int fd;
 
 	if (argc < SOCK_ARGC) {
-		printf("Usage: report s <address>\n");
+		usage();
 		return -1;
 	}
 
@@ -424,4 +422,22 @@ void sock_cleanup(int fd) {
 
 void handle_signal(int sig) {
 	exit_status = sig;
+}
+
+void usage(void) {
+	printf("Usage: compute ms <options>\n");
+	printf("\n");
+	printf("Modes:\n");
+	printf("    m - shared memory\n");
+	printf("        usage: compute m\n");
+	printf("\n");
+	printf("    s - sockets\n");
+	printf("        usage: compute s <address>\n");
+	printf("\n");
+	printf("        address:    IP address of managing server\n");
+	printf("\n");
+	printf("    Note:   The pipes mode can not be spawned directly.\n");
+	printf("            Use manage to start pipe mode.\n");
+	printf("\n");
+	exit(EXIT_FAILURE);
 }

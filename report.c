@@ -92,8 +92,7 @@ int main(int argc, char **argv) {
 	char mode;
 
 	if (argc < 2) {
-		printf("Mode not supplied\n");
-		exit(EXIT_FAILURE);
+		usage();
 	}
 
 	memset(&sigact, 0, sizeof(struct sigaction));
@@ -158,8 +157,8 @@ int main(int argc, char **argv) {
 		}
 		break;
 	default:
-		printf("Invalid mode\n");
-		exit(EXIT_FAILURE);
+		usage();
+		break;
 	}
 
 	exit(EXIT_SUCCESS);
@@ -350,8 +349,7 @@ int sock_init(int argc, char **argv) {
 	int fd;
 
 	if (argc < SOCK_ARGC) {
-		printf("Usage: report s <address>\n");
-		return -1;
+		usage();
 	}
 
 	fd = sock_connect(argv[2]);
@@ -461,4 +459,27 @@ int next_test(struct shmem_res *res) {
 
 void handle_signal(int sig) {
 	exit_status = sig;
+}
+
+void usage(void) {
+	printf("Usage: report mps <options>\n");
+	printf("\n");
+	printf("Modes:\n");
+	printf("    m - shared memory\n");
+	printf("        usage: report m [-k]\n");
+	printf("\n");
+	printf("        -k:         shut down computation\n");
+	printf("\n");
+	printf("    p - pipes\n");
+	printf("        usage: report p [-k]\n");
+	printf("\n");
+	printf("        -k:         shut down computation\n");
+	printf("\n");
+	printf("    s - sockets\n");
+	printf("        usage: report s <address> [-k]\n");
+	printf("\n");
+	printf("        address:    IP address of managing server\n");
+	printf("        -k:         shut down computation\n");
+	printf("\n");
+	exit(EXIT_FAILURE);
 }

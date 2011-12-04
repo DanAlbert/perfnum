@@ -884,12 +884,9 @@ void accept_client(struct sock_res *res) {
 }
 
 void usage(void) {
-	fprintf(stdout, "Usage: manage [cmps] <limit> <nprocs>\n");
+	fprintf(stdout, "Usage: manage [mps] <limit> <nprocs>\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "Modes:\n");
-	fprintf(stdout, "    c - clean up shared memory\n");
-	fprintf(stdout, "        usage: manage c\n");
-	fprintf(stdout, "\n");
 	fprintf(stdout, "    m - shared memory\n");
 	fprintf(stdout, "        usage: manage m <limit>\n");
 	fprintf(stdout, "\n");
