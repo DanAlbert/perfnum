@@ -128,27 +128,201 @@ struct sock_res {
 	bool missed_some;
 };
 
+/**
+ * @brief Initializes pipe resources
+ *
+ * Preconditions: res is not NULL, argv contains the proper arguments
+ *
+ * Postconditions: Members of res have been initialized
+ *
+ * @param argc Number of arguments in argv
+ * @param argv List of arguments given to the program
+ * @param res Pointer to a pipe resource structure
+ * @return true on success, false otherwise
+ */
 bool pipe_init(int argc, char **argv, struct pipe_res *res);
+
+/**
+ * @brief Reports perfect numbers found
+ *
+ * Receives information from compute proecesses and relays information to the
+ * report process when appropriate. Loops until signaled to exit.
+ *
+ * Preconditions: res is not NULL, pipes have been initialized
+ *
+ * Postconditions:
+ *
+ * @param res Pointer to pipe resource structure
+ */
 void pipe_report(struct pipe_res *res);
+
+/**
+ * @brief Cleans up pipe resources
+ *
+ * Preconditions: res is not NULL
+ *
+ * Postconditions: Resources in res have been released
+ *
+ * @param res Pointer to pipe resource structure
+ */
 void pipe_cleanup(struct pipe_res *res);
 
+/**
+ * @brief Initializes shared memory resources
+ *
+ * Preconditions: res is not NULL, argv contains the proper arguments
+ *
+ * Postconditions: Members of res have been initialized
+ *
+ * @param argc Number of arguments in argv
+ * @param argv List of arguments given to the program
+ * @param res Pointer to a shared memory resource structure
+ * @return true on success, false otherwise
+ */
 bool shmem_init(int argc, char **argv, struct shmem_res *res);
+
+/**
+ * @brief Cleans up shared memory resources
+ *
+ * Preconditions: res is not NULL
+ *
+ * Postconditions: Resources in res have been released
+ *
+ * @param res Pointer to shared memory resource structure
+ */
 void shmem_cleanup(struct shmem_res *res);
 
+/**
+ * @brief Initializes socket resources
+ *
+ * Preconditions: res is not NULL, argv contains the proper arguments
+ *
+ * Postconditions: Members of res have been initialized
+ *
+ * @param argc Number of arguments in argv
+ * @param argv List of arguments given to the program
+ * @param res Pointer to a socket resource structure
+ * @return true on success, false otherwise
+ */
 bool sock_init(int argc, char **argv, struct sock_res *res);
+
+/**
+ * @brief Reports perfect numbers found
+ *
+ * Receives information from compute proecesses and relays information to the
+ * report process when appropriate. Loops until signaled to exit.
+ *
+ * Preconditions: res is not NULL, sockets have been initialized
+ *
+ * Postconditions:
+ *
+ * @param res Pointer to socket resource structure
+ */
 void sock_report(struct sock_res *res);
+
+/**
+ * @brief Cleans up socket resources
+ *
+ * Preconditions: res is not NULL
+ *
+ * Postconditions: Resources in res have been released
+ *
+ * @res Pointer to socket esource structure
+ */
 void sock_cleanup(struct sock_res *res);
+
+/**
+ * @brief Identifies packet type and takes appropriate action
+ *
+ * Preconditions: fd is a valid file descriptor, res is not NULL, p is not NULL,
+ * sockets have been initialized
+ *
+ * Postconditions: Packet has been handled or an error has been reported
+ *
+ * @param fd File descriptor of the socket the packet was received on
+ * @res Pointer to socket resource structure
+ * @p Pointer to the packet to be handled
+ * @return true if the packet signaled shit down, false otherwise
+ */
 bool sock_handle_packet(int fd, struct sock_res *res, union packet *p);
 
+/**
+ * @brief Spawns compute processes for the pipes method
+ *
+ * Forks and execs appropriately, setting file descriptors and assigning ranges.
+ * Creates pipe. Configures nonblocking I/O.
+ *
+ * Preconditions: pids is not NULL, fds is not NULL
+ *
+ * Postconditions: Processes have been spawned
+ *
+ * @param pids Pointer to list of pids
+ * @param fds Pointer to two file descriptors for pipe
+ * @param limit Highest number to test
+ * @param nprocs Number of processes to spawn
+ * @return -1 on error, 0 on success
+ */
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
+
+/**
+ * @brief Kills and reaps any remaining compute processes
+ *
+ * Preconditions: res is not NULL
+ *
+ * Postconditions: All processes in res have been reaped
+ *
+ * @param res Pointer to pipe resource structure
+ */
 void collect_computes(struct pipe_res *res);
 
+/**
+ * @brief Creates and initializes the shared memory object and resource
+ * structure
+ *
+ * @author Kevin McGrath (taken from course website)
+ *
+ * Preconditions: path is not NULL, have permissions to create shared memory
+ * object at specified path, object size is positive
+ *
+ * Postconditions: The shared memory object has been created and initialized or
+ * an error has been reported
+ *
+ * @param path Path at which the shared memory object should be created
+ * @param object_size Size of the shared memory object to create
+ * @return Pointer to the mmaped shared memory object
+ */
 void *shmem_mount(char *path, int object_size);
 
+/**
+ * @brief Accepts a new TCP connection if there is room for more clients
+ *
+ * Preconditions: res is not NULL, sockets have been initialized
+ *
+ * Postconditions: The new connection has been accepted or refused if there is
+ * no room
+ *
+ * @param Pointer to socket resource structure
+ */
 void accept_client(struct sock_res *res);
 
+/**
+ * @brief Displays usage information and exits
+ *
+ * Preconditions:
+ *
+ * Postconditions:
+ */
 void usage(void);
 
+/**
+ * @brief Handles signal and sets exit flag
+ *
+ * Preconditions:
+ *
+ * Postconditions: Exit flag has been set
+ *
+ * @param sig Signal received
+ */
 void handle_signal(int sig);
 
 /// Global variable to record caught signal so main loop can exit cleanly
@@ -240,18 +414,6 @@ int main(int argc, char **argv) {
 	exit(EXIT_SUCCESS);
 }
 
-/**
- * @brief Initializes pipe resources
- *
- * Preconditions: res is not NULL, argv contains the proper arguments
- *
- * Postconditions: Members of res have been initialized
- *
- * @param argc Number of arguments in argv
- * @param argv List of arguments given to the program
- * @param res Pointer to a pipe resource structure
- * @return true on success, false otherwise
- */
 bool pipe_init(int argc, char **argv, struct pipe_res *res) {
 	char pid_str[SPIDSTR];
 	int fd;
@@ -310,18 +472,6 @@ bool pipe_init(int argc, char **argv, struct pipe_res *res) {
 	return true;
 }
 
-/**
- * @brief Reports perfect numbers found
- *
- * Receives information from compute proecesses and relays information to the
- * report process when appropriate. Loops until signaled to exit.
- *
- * Preconditions: res is not NULL, pipes have been initialized
- *
- * Postconditions: 
- *
- * @param res Pointer to pipe resource structure
- */
 void pipe_report(struct pipe_res *res) {
 	union packet packet;
 	int bytes_read;
@@ -396,15 +546,6 @@ void pipe_report(struct pipe_res *res) {
 	}
 }
 
-/**
- * @brief Cleans up pipe resources
- *
- * Preconditions: res is not NULL
- *
- * Postconditions: Resources in res have been released
- *
- * @param res Pointer to pipe resource structure
- */
 void pipe_cleanup(struct pipe_res *res) {
 	union packet packet;
 
@@ -456,18 +597,6 @@ void pipe_cleanup(struct pipe_res *res) {
 	unlink(PID_FILE);
 }
 
-/**
- * @brief Initializes shared memory resources
- *
- * Preconditions: res is not NULL, argv contains the proper arguments
- *
- * Postconditions: Members of res have been initialized
- *
- * @param argc Number of arguments in argv
- * @param argv List of arguments given to the program
- * @param res Pointer to a shared memory resource structure
- * @return true on success, false otherwise
- */
 bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	int total_size;
 	int bitmap_size;
@@ -499,14 +628,14 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	res->addr = shmem_mount(SHMEM_PATH, total_size);
 	res->limit = res->addr;
 	res->manage = res->limit + 1;
-	res->bitmap_sem = res->manage + 1;
+	res->bitmap_sem = (sem_t *)(res->manage + 1);
 	
 	// limit is a single integer, so bitmap is one int
-	res->bitmap = res->bitmap_sem + 1;
+	res->bitmap = (uint8_t *)(res->bitmap_sem + 1);
 	
-	res->perfect_numbers_sem = res->bitmap + bitmap_size;
-	res->perfect_numbers = res->perfect_numbers_sem + 1;
-	res->processes = res->perfect_numbers + NPERFNUMS;
+	res->perfect_numbers_sem = (sem_t *)(res->bitmap + bitmap_size);
+	res->perfect_numbers = (int *)(res->perfect_numbers_sem + 1);
+	res->processes = (struct process *)(res->perfect_numbers + NPERFNUMS);
 	res->end = res->processes + NPROCS;
 
 	// Set the limit in shared memory so other processes know
@@ -526,26 +655,17 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	}
 
 	// Mark all process slots as unused
-	for (struct process *p = res->processes; p < res->end; p++) {
+	for (struct process *p = res->processes; p < (struct process *)res->end; p++) {
 		p->pid = -1;
 	}
 
 	return true;
 }
 
-/**
- * @brief Cleans up shared memory resources
- *
- * Preconditions: res is not NULL
- *
- * Postconditions: Resources in res have been released
- *
- * @param res Pointer to shared memory resource structure
- */
 void shmem_cleanup(struct shmem_res *res) {
 	assert(res != NULL);
 
-	for (struct process *p = res->processes; p < res->end; p++) {
+	for (struct process *p = res->processes; p < (struct process *)res->end; p++) {
 		if (p->pid != -1) {
 			if (kill(p->pid, SIGQUIT) == -1) {
 				perror("Could not kill compute");
@@ -580,18 +700,6 @@ void shmem_cleanup(struct shmem_res *res) {
 	}
 }
 
-/**
- * @brief Initializes socket resources
- *
- * Preconditions: res is not NULL, argv contains the proper arguments
- *
- * Postconditions: Members of res have been initialized
- *
- * @param argc Number of arguments in argv
- * @param argv List of arguments given to the program
- * @param res Pointer to a socket resource structure
- * @return true on success, false otherwise
- */
 bool sock_init(int argc, char **argv, struct sock_res *res) {
 	struct sockaddr_in servaddr;
 	int on = 1; // For setsockopt()
@@ -652,23 +760,11 @@ bool sock_init(int argc, char **argv, struct sock_res *res) {
 	return true;
 }
 
-/**
- * @brief Reports perfect numbers found
- *
- * Receives information from compute proecesses and relays information to the
- * report process when appropriate. Loops until signaled to exit.
- *
- * Preconditions: res is not NULL, sockets have been initialized
- *
- * Postconditions: 
- *
- * @param res Pointer to socket resource structure
- */
 void sock_report(struct sock_res *res) {
 	union packet packet;
 	int fd;
 	int bytes_read;
-	bool done;
+	bool done = false;
 
 	fd_set rset;
 	int nready;
@@ -739,15 +835,6 @@ void sock_report(struct sock_res *res) {
 	}
 }
 
-/**
- * @brief Cleans up socket resources
- *
- * Preconditions: res is not NULL
- *
- * Postconditions: Resources in res have been released
- *
- * @res Pointer to socket esource structure
- */
 void sock_cleanup(struct sock_res *res) {
 	union packet p;
 
@@ -770,19 +857,6 @@ void sock_cleanup(struct sock_res *res) {
 	res->listen = -1;
 }
 
-/**
- * @brief Identifies packet type and takes appropriate action
- *
- * Preconditions: fd is a valid file descriptor, res is not NULL, p is not NULL,
- * sockets have been initialized
- *
- * Postconditions: Packet has been handled or an error has been reported
- *
- * @param fd File descriptor of the socket the packet was received on
- * @res Pointer to socket resource structure
- * @p Pointer to the packet to be handled
- * @return true if the packet signaled shit down, false otherwise
- */
 bool sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 	union packet outbound;
 
@@ -874,22 +948,6 @@ bool sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 	return false;
 }
 
-/**
- * @brief Spawns compute processes for the pipes method
- *
- * Forks and execs appropriately, setting file descriptors and assigning ranges.
- * Creates pipe. Configures nonblocking I/O.
- *
- * Preconditions: pids is not NULL, fds is not NULL
- *
- * Postconditions: Processes have been spawned
- *
- * @param pids Pointer to list of pids
- * @param fds Pointer to two file descriptors for pipe
- * @param limit Highest number to test
- * @param nprocs Number of processes to spawn
- * @return -1 on error, 0 on success
- */
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	int flags;
 	int numbers_per_proc = floor((double)limit / (double)nprocs);
@@ -975,15 +1033,6 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	return 0;
 }
 
-/**
- * @brief Kills and reaps any remaining compute processes
- *
- * Preconditions: res is not NULL
- *
- * Postconditions: All processes in res have been reaped
- *
- * @param res Pointer to pipe resource structure
- */
 void collect_computes(struct pipe_res *res) {
 	// Kill any other computes
 	for (int i = 0; i < res->nprocs; i++) {
@@ -1001,22 +1050,6 @@ void collect_computes(struct pipe_res *res) {
 	}
 }
 
-/**
- * @brief Creates and initializes the shared memory object and resource
- * structure
- *
- * @author Kevin McGrath (taken from course website)
- *
- * Preconditions: path is not NULL, have permissions to create shared memory
- * object at specified path, object size is positive
- *
- * Postconditions: The shared memory object has been created and initialized or
- * an error has been reported
- *
- * @param path Path at which the shared memory object should be created
- * @param object_size Size of the shared memory object to create
- * @return Pointer to the mmaped shared memory object
- */
 void *shmem_mount(char *path, int object_size) {
 	int shmem_fd;
     void *addr;
@@ -1045,16 +1078,6 @@ void *shmem_mount(char *path, int object_size) {
     return addr;
 }
 
-/**
- * @brief Accepts a new TCP connection if there is room for more clients
- *
- * Preconditions: res is not NULL, sockets have been initialized
- *
- * Postconditions: The new connection has been accepted or refused if there is
- * no room
- *
- * @param Pointer to socket resource structure
- */
 void accept_client(struct sock_res *res) {
 	struct sockaddr_in addr;
 	socklen_t len;
@@ -1087,13 +1110,6 @@ void accept_client(struct sock_res *res) {
 	}
 }
 
-/**
- * @brief Displays usage information and exits
- *
- * Preconditions:
- *
- * Postconditions:
- */
 void usage(void) {
 	fprintf(stdout, "Usage: manage [mps] <limit> <nprocs>\n");
 	fprintf(stdout, "\n");
@@ -1118,15 +1134,6 @@ void usage(void) {
 	exit(EXIT_FAILURE);
 }
 
-/**
- * @brief Handles signal and sets exit flag
- *
- * Preconditions:
- *
- * Postconditions: Exit flag has been set
- *
- * @param sig Signal received
- */
 void handle_signal(int sig) {
 	exit_status = sig;
 }

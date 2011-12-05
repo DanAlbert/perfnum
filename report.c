@@ -480,7 +480,7 @@ void shmem_report(struct shmem_res *res) {
 		}
 	}
 
-	for (struct process *p = res->processes; p < res->end; p++) {
+	for (struct process *p = res->processes; p < (struct process *)res->end; p++) {
 		if (p->pid != -1) {
 			if (first_proc == true) {
 				printf("\nProcesses:\n");
@@ -613,7 +613,7 @@ int next_test(struct shmem_res *res) {
 	// Loop over each byte in the bitmap
 	// Will actually test until the end of the byte if manage was given a limit that was
 	// not a power of two
-	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
+	for (uint8_t *addr = res->bitmap; addr < (uint8_t *)res->perfect_numbers; addr++) {
 		for (int i = 0; i < 8; i++) {
 			if (BIT(*addr, i) == 0) {
 				return ((addr - res->bitmap) * 8) + i + 1;

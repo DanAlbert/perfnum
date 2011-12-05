@@ -35,9 +35,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "packets.h"
 #include "shmem.h"
+#include "sock.h"
 
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
@@ -204,7 +206,7 @@ void handle_signal(int sig);
  *
  * Postconditions:
  */
-void usage(void) {
+void usage(void);
 
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
@@ -314,7 +316,7 @@ int next_test(struct shmem_res *res) {
 	// Loop over each byte in the bitmap
 	// Will actually test until the end of the byte if manage was given a limit
 	// that was not a power of two
-	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
+	for (uint8_t *addr = res->bitmap; addr < (uint8_t *)res->perfect_numbers; addr++) {
 		for (int i = 0; i < 8; i++) {
 			if (BIT(*addr, i) == 0) {
 
@@ -362,7 +364,7 @@ void shmem_loop(struct shmem_res *res) {
 
 	assert(res != NULL);
 
-	for (p = res->processes; p < res->end; p++) {
+	for (p = res->processes; p < (struct process *)res->end; p++) {
 		if (p->pid == -1) {
 			p->pid = getpid();
 			p->found = 0;

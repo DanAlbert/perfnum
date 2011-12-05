@@ -28,6 +28,8 @@
  *
  */
 #include <arpa/inet.h>
+#include <stdio.h>
+#include <string.h>
 #include "sock.h"
 
 int sock_connect(char *host) {
@@ -45,7 +47,7 @@ int sock_connect(char *host) {
 	inet_pton(AF_INET, host, &addr.sin_addr);
 	addr.sin_port = htons(SERVER_PORT);
 
-	if (connect(fd, (struct sockadd *)&addr, sizeof(addr)) == -1) {
+	if (connect(fd, (struct sockaddr *)(&addr), sizeof(addr)) == -1) {
 		perror("Unable to connect to server");
 		return -1;
 	}

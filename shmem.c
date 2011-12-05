@@ -79,13 +79,13 @@ bool shmem_load(struct shmem_res *res) {
 	res->addr = addr;
 	res->limit = res->addr;
 	res->manage = res->limit + 1;
-	res->bitmap_sem = res->manage + 1;
+	res->bitmap_sem = (sem_t *)(res->manage + 1);
 	
 	// limit is a single integer, so bitmap is one int past
-	res->bitmap = res->bitmap_sem + 1;
-	res->perfect_numbers_sem = res->bitmap + bitmap_size;
-	res->perfect_numbers = res->perfect_numbers_sem + 1;
-	res->processes = res->perfect_numbers + NPERFNUMS;
+	res->bitmap = (uint8_t *)(res->bitmap_sem + 1);
+	res->perfect_numbers_sem = (sem_t *)(res->bitmap + bitmap_size);
+	res->perfect_numbers = (int *)(res->perfect_numbers_sem + 1);
+	res->processes = (struct process *)(res->perfect_numbers + NPERFNUMS);
 	res->end = res->processes + NPROCS;
 
 	return true;
