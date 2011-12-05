@@ -204,6 +204,8 @@ void shmem_cleanup(struct shmem_res *res);
 /**
  * @brief Initializes socket resources
  *
+ * Some of this code was taken from the course website.
+ *
  * Preconditions: res is not NULL, argv contains the proper arguments
  *
  * Postconditions: Members of res have been initialized
@@ -304,6 +306,8 @@ void *shmem_mount(char *path, int object_size);
 
 /**
  * @brief Accepts a new TCP connection if there is room for more clients
+ *
+ * Some of this code was taken from the course website.
  *
  * Preconditions: res is not NULL, sockets have been initialized
  *
