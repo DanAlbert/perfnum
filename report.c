@@ -60,27 +60,179 @@
 /// Maximum size of the PID string
 #define SPIDSTR 11
 
+/**
+ * @brief Checks command line arguments for kill option
+ *
+ * Preconditions: Valid mode specified
+ *
+ * Postconditions:
+ *
+ * @param argc Number of command line arguments
+ * @param argv List of command line arguments
+ * @param mode Mode specifed at command line
+ * @return true if kill option was speciefied, false otherwise
+ */
 bool check_kill(int argc, char **argv, char mode);
 
+/**
+ * @brief Initializes pipe resources
+ *
+ * Preconditions: manage is not NULL
+ *
+ * Postconditions: Managing process ID has been loaded, FIFO has been opened
+ *
+ * @param manage Pointer to memory to load managing process ID into
+ * @return FIFO file descriptor or -1 on error
+ */
 int pipe_init(pid_t *manage);
+
+/**
+ * @brief Responds to and reports messages from managign process
+ *
+ * Preconditions: Pipe resources have been initialized
+ *
+ * Postconditions:
+ *
+ * @param fd FIFO file descriptor
+ * @param manage Process ID of managing process
+ */
 void pipe_report(int fd, pid_t manage);
+
+/**
+ * @brief Cleans up pipe resources
+ *
+ * Preconditions:
+ *
+ * Postconditions: Pipe resources have been released
+ *
+ * @param fd FIFO file descriptor
+ */
 void pipe_cleanup(int fd);
+
+/**
+ * @brief Signals managing process to shut down computation
+ *
+ * Preconditions:
+ *
+ * Postconditions: Managing process has been signaled to shut down computation
+ *
+ * @return true on success, false otherwise
+ */
 bool pipe_kill(void);
 
+/**
+ * @brief Loads a PID from a file
+ *
+ * Preconditions: path is not NULL, the file at path is readable, the file at path
+ * contains a process ID
+ *
+ * Postconditions: Process ID has been read
+ *
+ * @param path Path of the PID file to read
+ * @return PID contained in file or -1 on error
+ */
 int load_pid_file(char *path);
 
+/**
+ * @brief Reports perfect numbers and computation statistics
+ *
+ * Preconditions: res is not NULL, shared memory resources have been initialized
+ *
+ * Postconditions: Data has been reported
+ *
+ * @param res Pointer to shared memory resource strucure
+ */
 void shmem_report(struct shmem_res *res);
+
+/**
+ * @brief Signals managing process to shut down computation
+ *
+ * Preconditions: res is not NULL, shared memory resources have been initialized
+ *
+ * Postconditions: Managing process has been signaled to shut down computation
+ *
+ * @return true on success, false otherwise
+ */
 bool shmem_kill(struct shmem_res *res);
 
+/**
+ * @brief Initializes and connects socket resources
+ *
+ * Preconditions: Appropriate command line arguments have been supplied
+ *
+ * Postconditions: Socket resources have been initialized, the client has connected and
+ * the client is registered with the server to be notified of perfect numbers
+ *
+ * @param argc Number of command line arguments
+ * @param argv List of command line arguments
+ * @return Socket file descriptor or -1 on error
+ */
 int sock_init(int argc, char **argv);
+
+/**
+ * @brief Reports received information from server
+ *
+ * Preconditions: Sockets have been initialized
+ *
+ * Postconditions: Information has been reported
+ *
+ * @param fd Socket file descriptor
+ */
 void sock_report(int fd);
+
+/**
+ * @brief Cleans up socket resources
+ *
+ * Preconditions:
+ *
+ * Postconditions: Socket resources have been released
+ *
+ * @param fd Socket file descriptor
+ */
 void sock_cleanup(int fd);
+
+/**
+ * @brief Signals managing server to shut down computation
+ *
+ * Preconditions: Sockets have been initialized
+ *
+ * Postconditions: Managing server has been signaled to shut down computation
+ *
+ * @param fd Socket file descriptor
+ * @return true on success, false otherwise
+ */
 bool sock_kill(int fd);
 
+/**
+ * @brief Finds the next untested number
+ *
+ * Preconditions: res is not NULL, shared memory has been initialized
+ *
+ * Postconditions:
+ *
+ * @param res Pointer to shared memory resource structure
+ * @return Next untested number or -1 if all numbers have been tested
+ */
 int next_test(struct shmem_res *res);
 
+/**
+ * @brief Exits the program cleanly.
+ *
+ * Preconditions:
+ *
+ * Postconditions: All open resources have been released
+ *
+ * @param sig The signal which exited the program
+ */
 void handle_signal(int sig);
 
+/**
+ * @brief Displays usage information and exits
+ *
+ * Preconditions:
+ *
+ * Postconditions:
+ */
 void usage(void);
 
 /// Global variable to record caught signal so main loop can exit cleanly
