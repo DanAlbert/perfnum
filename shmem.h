@@ -40,24 +40,24 @@
  * Process data structure
  */
 struct process {
-	pid_t pid;
-	int found;
-	int tested;
+	pid_t pid;	///< Process identifier
+	int found;	///< Number of perfect numbers found
+	int tested;	///< Number of numbers tested
 };
 
 /**
  * Shared memory layout structure
  */
 struct shmem_res {
-	void *addr;
-	int *limit;
-	pid_t *manage;
-	sem_t *bitmap_sem;
-	uint8_t *bitmap;
-	sem_t *perfect_numbers_sem;
-	int *perfect_numbers;
-	struct process *processes;
-	void *end;
+	void *addr;					///< Address of the beginning of the shared memory object
+	int *limit;					///< Address of the computation limit
+	pid_t *manage;				///< Address of the managing process's ID
+	sem_t *bitmap_sem;			///< Address of the bitmap semaphore
+	uint8_t *bitmap;			///< Address of the beginning of the bitmap
+	sem_t *perfect_numbers_sem;	///< Address of the perfect numbers semaphore
+	int *perfect_numbers;		///< Address of the beginning of the perfect numebrs array
+	struct process *processes;	///< Address of the beginning of the process list
+	void *end;					///< Address of the end of the shared memory object
 };
 
 /**
