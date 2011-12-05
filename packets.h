@@ -38,6 +38,9 @@
 /// Client "pid" for closed packets in socket mode
 #define PID_CLIENT ((pid_t)1)
 
+/**
+ * Packet identifier constants
+ */
 enum packet_id {
 	PACKETID_NULL,
 	PACKETID_DONE,
@@ -50,27 +53,42 @@ enum packet_id {
 	PACKETID_REFUSE
 };
 
+/**
+ * 'done' packet payload
+ */
 struct packet_done {
 	enum packet_id packet_id;
 	pid_t pid;
 };
 
+/**
+ * 'closed' packet payload
+ */
 struct packet_closed {
 	enum packet_id packet_id;
 	pid_t pid;
 };
 
+/**
+ * 'range' packet payload
+ */
 struct packet_range {
 	enum packet_id packet_id;
 	int start;
 	int end;
 };
 
+/**
+ * 'perfnum' packet payload
+ */
 struct packet_perfnum {
 	enum packet_id packet_id;
 	int perfnum;
 };
 
+/**
+ * General packet type. Ensures that sent packets always have the same size.
+ */
 union packet {
 	enum packet_id id;
 	struct packet_done done;
@@ -79,7 +97,30 @@ union packet {
 	struct packet_perfnum perfnum;
 };
 
+/**
+ * @brief Read a packet from a stream, blocking until one is received
+ *
+ * Preconditions: fd is a valid file descriptor, p is not NULL
+ *
+ * Postconditions: Received packet has been loaded into memory pointed to by p
+ *
+ * @param fd File descriptor of the stream to read from
+ * @param p Pointer to packet to load data into
+ * @return -1 on error, 0 otherwise
+ */
 int get_packet(int fd, union packet *p);
+
+/**
+ * @brief Write a packet to a stream
+ *
+ * Preconditions: fd is a valid file descriptor, p is not NULL
+ *
+ * Postconditions: Packet has been sent over stream
+ *
+ * @param fd File descriptor of the stream to write to
+ * @param p Pointer to packet to send
+ * @return -1 on error, 0 otherwise
+ */
 int send_packet(int fd, union packet *p);
 
 #endif // PACKETS_H

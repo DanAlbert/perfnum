@@ -53,12 +53,18 @@
 /// Maximum number of processes to track in shared memory
 #define NPROCS 20
 
+/**
+ * Process data structure
+ */
 struct process {
 	pid_t pid;
 	int found;
 	int tested;
 };
 
+/**
+ * Shared memory layout structure
+ */
 struct shmem_res {
 	void *addr;
 	int *limit;
@@ -71,6 +77,18 @@ struct shmem_res {
 	void *end;
 };
 
+/**
+ * @brief Opens and mmaps shared memory object
+ *
+ * Preconditions: res is not NULL, shared memory object exists and is readable, shared
+ * memory object is the appropriate size
+ *
+ * Postconditions: Shared memory object has been opened and mapped, resource locations
+ * have been set in res
+ *
+ * @param res Pointer to shared memory resource strucure
+ * @return true on success, false otherwise
+ */
 bool shmem_load(struct shmem_res *res);
 
 #endif // SHMEM_H
