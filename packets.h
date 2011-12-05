@@ -57,33 +57,33 @@ enum packet_id {
  * 'done' packet payload
  */
 struct packet_done {
-	enum packet_id packet_id;
-	pid_t pid;
+	enum packet_id packet_id;	///< Packet identifier
+	pid_t pid;					///< Process ID of the sending process
 };
 
 /**
  * 'closed' packet payload
  */
 struct packet_closed {
-	enum packet_id packet_id;
-	pid_t pid;
+	enum packet_id packet_id;	///< Packet identifier
+	pid_t pid;					///< Process ID of the sending process
 };
 
 /**
  * 'range' packet payload
  */
 struct packet_range {
-	enum packet_id packet_id;
-	int start;
-	int end;
+	enum packet_id packet_id;	///< Packet identifier
+	int start;					///< Start of assigned range
+	int end;					///< End of assigned range
 };
 
 /**
  * 'perfnum' packet payload
  */
 struct packet_perfnum {
-	enum packet_id packet_id;
-	int perfnum;
+	enum packet_id packet_id;	///< Packet identifier
+	int perfnum;				///< Perfect number
 };
 
 /**

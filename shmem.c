@@ -34,33 +34,33 @@
 #include "shmem.h"
 
 bool shmem_load(struct shmem_res *res) {
-    int shmem_fd;
-    int bitmap_size;
-    int perfnums_size;
-    int processes_size;
-    int total_size;
-    int limit;
-    void *addr;
+	int shmem_fd;
+	int bitmap_size;
+	int perfnums_size;
+	int processes_size;
+	int total_size;
+	int limit;
+	void *addr;
 
-    assert(res != NULL);
+	assert(res != NULL);
 
-    /* create and resize it */
-    shmem_fd = shm_open(SHMEM_PATH, O_RDWR, S_IRUSR | S_IWUSR);
-    if (shmem_fd == -1){
-        perror("failed to open shared memory object");
-        return false;
-    }
+	// Open the shared memory object
+	shmem_fd = shm_open(SHMEM_PATH, O_RDWR, S_IRUSR | S_IWUSR);
+	if (shmem_fd == -1) {
+		perror("failed to open shared memory object");
+		return false;
+	}
 
-    if (read(shmem_fd, &limit, sizeof(int)) == -1) {
-    	perror("Could not read limit");
-    	return false;
-    }
+	if (read(shmem_fd, &limit, sizeof(int)) == -1) {
+		perror("Could not read limit");
+		return false;
+	}
 
 	bitmap_size = limit / 8 + 1;
 	perfnums_size = NPERFNUMS * sizeof(int);
 	processes_size = NPROCS * sizeof(struct process);
 	total_size = sizeof(pid_t) + sizeof(int) + (2 * sizeof(sem_t)) + bitmap_size +
-	   perfnums_size + processes_size;
+		perfnums_size + processes_size;
 
 	// Check that the size of the shared memory object is the correct size
 	if (total_size != lseek(shmem_fd, 0, SEEK_END)) {
@@ -70,11 +70,11 @@ bool shmem_load(struct shmem_res *res) {
 
 	lseek(shmem_fd, 0, SEEK_SET); // Seek start
 
-    addr = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0);
-    if (addr == MAP_FAILED){
-        perror("failed to map shared memory object");
-        return false;
-    }
+	addr = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0);
+	if (addr == MAP_FAILED) {
+		perror("failed to map shared memory object");
+		return false;
+	}
 
 	res->addr = addr;
 	res->limit = res->addr;

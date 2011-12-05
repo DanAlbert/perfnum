@@ -42,6 +42,9 @@
 #include "shmem.h"
 #include "sock.h"
 
+/// Minimum number of arguments this program needs to run
+#define ARGC_MIN 2
+
 /// Number of arguments required for sockets method
 #define PIPE_ARGC 2
 
@@ -50,6 +53,12 @@
 
 /// Number of arguments required for sockets method
 #define SOCK_ARGC 3
+
+/// Index of mode argument in argv
+#define MODE_ARG 1
+
+/// Index of address argument in argv
+#define ADDR_ARG 2
 
 /// File path of named pipe for pipe method
 #define FIFO_PATH ".perfect_numbers"
@@ -69,10 +78,9 @@
  *
  * @param argc Number of command line arguments
  * @param argv List of command line arguments
- * @param mode Mode specifed at command line
  * @return true if kill option was speciefied, false otherwise
  */
-bool check_kill(int argc, char **argv, char mode);
+bool check_kill(int argc, char **argv);
 
 /**
  * @brief Initializes pipe resources
@@ -258,7 +266,7 @@ int main(int argc, char **argv) {
 	pid_t manage;
 	char mode;
 
-	if (argc < 2) {
+	if (argc < ARGC_MIN) {
 		usage();
 	}
 
@@ -277,7 +285,7 @@ int main(int argc, char **argv) {
 		perror("Could not set SIGINT");
 	}
 
-	mode = argv[1][0]; // Mode is first char
+	mode = argv[MODE_ARG][0]; // Mode is first char
 
 	switch (mode) {
 	case 'm':
@@ -285,7 +293,7 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 
-		if (check_kill(argc, argv, mode)) {
+		if (check_kill(argc, argv)) {
 			if (shmem_kill(&res) == false) {
 				exit(EXIT_FAILURE);
 			}
@@ -294,7 +302,7 @@ int main(int argc, char **argv) {
 		}
 		break;
 	case 'p':
-		if (check_kill(argc, argv, mode)) {
+		if (check_kill(argc, argv)) {
 			if (pipe_kill() == false) {
 				exit(EXIT_FAILURE);
 			}
@@ -313,7 +321,7 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 
-		if (check_kill(argc, argv, mode)) {
+		if (check_kill(argc, argv)) {
 			if (sock_kill(fd) == false) {
 				sock_cleanup(fd);
 				exit(EXIT_FAILURE);
@@ -331,8 +339,8 @@ int main(int argc, char **argv) {
 	exit(EXIT_SUCCESS);
 }
 
-bool check_kill(int argc, char **argv, char mode) {
-	switch (mode) {
+bool check_kill(int argc, char **argv) {
+	switch (argv[MODE_ARG][0]) {
 	case 'm':
 		if (argc > SHMEM_ARGC) {
 			if (strcmp(argv[SHMEM_ARGC], "-k") == 0) {
@@ -519,7 +527,7 @@ int sock_init(int argc, char **argv) {
 		usage();
 	}
 
-	fd = sock_connect(argv[2]);
+	fd = sock_connect(argv[ADDR_ARG]);
 	if (fd == -1) {
 		return -1;
 	}

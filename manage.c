@@ -52,14 +52,29 @@
 #include "shmem.h"
 #include "sock.h"
 
+/// Minimum number of arguments this program needs to run
+#define ARGC_MIN 2
+
+/// Number of arguments required for pipe method
+#define PIPE_ARGC 4
+
+/// Number of arguments required for shared memory method
+#define SHMEM_ARGC 3
+
+/// Number of arguments required for sockets method
+#define SOCK_ARGC 3
+
+/// Index of mode argument in argv
+#define MODE_ARG 1
+
+/// Index of limit argument in argv
+#define LIMIT_ARG 2
+
 /// Path to compute program
 #define COMPUTE_CMD "./compute"
 
 /// Path to compute program
 #define REPORT_CMD "./report"
-
-/// Number of arguments required for pipe method
-#define PIPE_ARGC 4
 
 /// File path of named pipe for pipe method
 #define FIFO_PATH ".perfect_numbers"
@@ -72,12 +87,6 @@
 
 /// File mode of named pipe for pipe method
 #define FIFO_MODE (S_IRUSR | S_IWUSR)
-
-/// Number of arguments required for shared memory method
-#define SHMEM_ARGC 3
-
-/// Number of arguments required for sockets method
-#define SOCK_ARGC 3
 
 /// Number of tests to assign in each block
 #define NASSIGN 1000
@@ -101,31 +110,31 @@
  * Contains resources used by pipe mode
  */
 struct pipe_res {
-	pid_t *compute_pids;
-	int perfnums[SPERFNUMS];
-	int nperfnums;
-	int compute_pipe[2];
-	int report_fifo;
-	int nprocs;
-	int limit;
+	pid_t *compute_pids;		///< List of PIDs for compute processes
+	int perfnums[SPERFNUMS];	///< List of perfect numbers found
+	int nperfnums;				///< Number of perfect numbers found
+	int compute_pipe[2];		///< Pipe for communicating with compute processes
+	int report_fifo;			///< FIFO for communicating with report process
+	int nprocs;					///< Number of compute processes spawned
+	int limit;					///< Highest number to test
 };
 
 /**
  * Contains resources used by socket mode
  */
 struct sock_res {
-	int listen;
-	int notify;
-	int clients[MAX_CLIENTS];
-	int perfnums[SPERFNUMS];
-	int nperfnums;
-	int limit;
-	int highest_assigned;
-	bool done;
-	fd_set allfds;
-	int maxfd;
-	int maxi;
-	bool missed_some;
+	int listen;					///< File descriptor of server socket
+	int notify;					///< File descriptor of client receiving notifications
+	int clients[MAX_CLIENTS];	///< List of connected clients
+	int perfnums[SPERFNUMS];	///< List of perfect numbers found
+	int nperfnums;				///< Number of perfect numbers found
+	int limit;					///< Highest number to test
+	int highest_assigned;		///< Highest number assigned to a compute process
+	bool done;					///< Flag to mark whether computation has finished
+	fd_set allfds;				///< Set of all file descriptors to listen on
+	int maxfd;					///< Highest file descriptor to listen on
+	int maxi;					///< Highest assigned index in clients
+	bool missed_some;			///< Flag to mark if a process terminated prematurely
 };
 
 /**
@@ -348,7 +357,7 @@ int main(int argc, char **argv) {
 	struct sock_res sock_res;
 	char mode;
 
-	if (argc < 2) {
+	if (argc < ARGC_MIN) {
 		usage();
 	}
 
@@ -372,7 +381,7 @@ int main(int argc, char **argv) {
 		perror("Could not set SIGPIPE handler");
 	}
 
-	mode = argv[1][0]; // Only need the first character
+	mode = argv[MODE_ARG][0]; // Only need the first character
 
 	switch (mode) {
 	case 'p':
@@ -390,7 +399,7 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 		while (1) {
-			// Loop until signalled to shut down
+			// Loop until signaled to shut down
 			if (exit_status != EXIT_SUCCESS) {
 				fputs("\r", stderr);
 				break;
@@ -477,6 +486,7 @@ void pipe_report(struct pipe_res *res) {
 	int bytes_read;
 	int body_count = 0;
 	bool done = false;
+	int i;
 
 	assert(res != NULL);
 
@@ -527,7 +537,7 @@ void pipe_report(struct pipe_res *res) {
 					}
 
 					// Mark that the process has exited
-					for (int i = 0; i < res->nprocs; i++) {
+					for (i = 0; i < res->nprocs; i++) {
 						if (res->compute_pids[i] == packet.done.pid) {
 							res->compute_pids[i] = -1;
 						}
@@ -548,6 +558,7 @@ void pipe_report(struct pipe_res *res) {
 
 void pipe_cleanup(struct pipe_res *res) {
 	union packet packet;
+	int i;
 
 	assert(res != NULL);
 
@@ -579,7 +590,7 @@ void pipe_cleanup(struct pipe_res *res) {
 	unlink(FIFO_PATH);
 
 	// Kill any other computes
-	for (int i = 0; i < res->nprocs; i++) {
+	for (i = 0; i < res->nprocs; i++) {
 		if (res->compute_pids[i] != -1) {
 			if (kill(res->compute_pids[i], SIGQUIT) == -1) {
 				perror("Could not kill process");
@@ -598,6 +609,7 @@ void pipe_cleanup(struct pipe_res *res) {
 }
 
 bool shmem_init(int argc, char **argv, struct shmem_res *res) {
+	struct process *p;
 	int total_size;
 	int bitmap_size;
 	int perfnums_size;
@@ -655,7 +667,7 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 	}
 
 	// Mark all process slots as unused
-	for (struct process *p = res->processes; p < (struct process *)res->end; p++) {
+	for (p = res->processes; p < (struct process *)res->end; p++) {
 		p->pid = -1;
 	}
 
@@ -663,9 +675,11 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res) {
 }
 
 void shmem_cleanup(struct shmem_res *res) {
+	struct process *p;
+
 	assert(res != NULL);
 
-	for (struct process *p = res->processes; p < (struct process *)res->end; p++) {
+	for (p = res->processes; p < (struct process *)res->end; p++) {
 		if (p->pid != -1) {
 			if (kill(p->pid, SIGQUIT) == -1) {
 				perror("Could not kill compute");
@@ -703,6 +717,7 @@ void shmem_cleanup(struct shmem_res *res) {
 bool sock_init(int argc, char **argv, struct sock_res *res) {
 	struct sockaddr_in servaddr;
 	int on = 1; // For setsockopt()
+	int i;
 
 	assert(res != NULL);
 
@@ -743,14 +758,14 @@ bool sock_init(int argc, char **argv, struct sock_res *res) {
 
 	res->notify = -1;
 	res->nperfnums = 0;
-	res->limit = atoi(argv[2]);
+	res->limit = atoi(argv[LIMIT_ARG]);
 	res->highest_assigned = 0;
 	res->done = false;
 	res->maxfd = res->listen;
 	res->maxi = -1;
 	res->missed_some = false;
 
-	for (int i = 0; i < MAX_CLIENTS; i++) {
+	for (i = 0; i < MAX_CLIENTS; i++) {
 		res->clients[i] = -1; // Denotes an unused index
 	}
 
@@ -765,6 +780,7 @@ void sock_report(struct sock_res *res) {
 	int fd;
 	int bytes_read;
 	bool done = false;
+	int i;
 
 	fd_set rset;
 	int nready;
@@ -779,7 +795,7 @@ void sock_report(struct sock_res *res) {
 		}
 
 		rset = res->allfds;
-		nready = select(res->maxfd+1, &rset, NULL, NULL, NULL);
+		nready = select(res->maxfd + 1, &rset, NULL, NULL, NULL);
 		if (nready == -1) {
 			if (errno != EINTR) {
 				perror("Select failed");
@@ -800,7 +816,7 @@ void sock_report(struct sock_res *res) {
 		}
 
 		// Check all clients for data
-		for (int i = 0; i <= res->maxi; i++) {
+		for (i = 0; i <= res->maxi; i++) {
 			fd = res->clients[i];
 			if (fd < 0){
 				continue;
@@ -837,12 +853,13 @@ void sock_report(struct sock_res *res) {
 
 void sock_cleanup(struct sock_res *res) {
 	union packet p;
+	int i;
 
 	assert(res != NULL);
 
 	p.id = PACKETID_CLOSED;
 	p.closed.pid = PID_SERVER;
-	for (int i = 0; i < MAX_CLIENTS; i++) {
+	for (i = 0; i < MAX_CLIENTS; i++) {
 		if (res->clients[i] != -1) {
 			send_packet(res->clients[i], &p);
 			close(res->clients[i]);
@@ -859,6 +876,7 @@ void sock_cleanup(struct sock_res *res) {
 
 bool sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 	union packet outbound;
+	int i;
 
 	assert(res != NULL);
 	assert(p != NULL);
@@ -921,7 +939,7 @@ bool sock_handle_packet(int fd, struct sock_res *res, union packet *p) {
 
 			// Send list of numbers already found
 			outbound.id = PACKETID_PERFNUM;
-			for (int i = 0; i < res->nperfnums; i++) {
+			for (i = 0; i < res->nperfnums; i++) {
 				outbound.perfnum.perfnum = res->perfnums[i];
 				send_packet(fd, &outbound);
 			}
@@ -952,13 +970,14 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	int flags;
 	int numbers_per_proc = floor((double)limit / (double)nprocs);
 	int end = 0;
+	int i;
 
 	assert(pids != NULL);
 	assert(fds != NULL);
 
 	*pids = (pid_t *)malloc(limit * sizeof(pid_t));
 	if (*pids == NULL) {
-		perror("main");
+		perror("Could not allocate memory");
 		exit(EXIT_FAILURE);
 	}
 
@@ -967,7 +986,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 		return -1;
 	}
 
-	for (int i = 0; i < nprocs; i++) {
+	for (i = 0; i < nprocs; i++) {
 		pid_t pid;
 
 		char start_str[11];
@@ -978,8 +997,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 		start = end + 1;
 
 		// Weight the extra numbers to the front (started first, fastest check)
-		if (i == 0)
-		{
+		if (i == 0) {
 			end = numbers_per_proc + (limit % nprocs);
 		} else {
 			end = start + numbers_per_proc - 1;
@@ -1026,7 +1044,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 	}
 	
 	if (fcntl(fds[READ], F_SETFL, flags | O_NONBLOCK) == -1) {
-		perror("manage: fcntl");
+		perror("Could not set file control options");
 		return -1;
 	}
 
@@ -1034,8 +1052,10 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 }
 
 void collect_computes(struct pipe_res *res) {
+	int i;
+
 	// Kill any other computes
-	for (int i = 0; i < res->nprocs; i++) {
+	for (i = 0; i < res->nprocs; i++) {
 		if (res->compute_pids[i] != -1) {
 			if (kill(res->compute_pids[i], SIGQUIT) == -1) {
 				perror("Could not kill process");
@@ -1052,43 +1072,45 @@ void collect_computes(struct pipe_res *res) {
 
 void *shmem_mount(char *path, int object_size) {
 	int shmem_fd;
-    void *addr;
+	void *addr;
 
 	assert(path != NULL);
 	assert(object_size > 0);
 
-    /* create and resize it */
-    shmem_fd = shm_open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-    if (shmem_fd == -1){
-        perror("failed to open shared memory object");
-        exit(EXIT_FAILURE);
-    }
-    /* resize it to something reasonable */
-    if (ftruncate(shmem_fd, object_size) == -1){
-        perror("failed to resize shared memory object");
-        exit(EXIT_FAILURE);
-    }
+	// create and resize it
+	shmem_fd = shm_open(path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+	if (shmem_fd == -1) {
+		perror("Failed to open shared memory object");
+		exit(EXIT_FAILURE);
+	}
 
-    addr = mmap(NULL, object_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0);
-    if (addr == MAP_FAILED){
-        fprintf(stderr, "failed to map shared memory object\n");
-        exit(EXIT_FAILURE);
-    }
+	// resize it to something reasonable
+	if (ftruncate(shmem_fd, object_size) == -1) {
+		perror("Failed to resize shared memory object");
+		exit(EXIT_FAILURE);
+	}
 
-    return addr;
+	addr = mmap(NULL, object_size, PROT_READ | PROT_WRITE, MAP_SHARED, shmem_fd, 0);
+	if (addr == MAP_FAILED) {
+		perror("Failed to map shared memory object");
+		exit(EXIT_FAILURE);
+	}
+
+	return addr;
 }
 
 void accept_client(struct sock_res *res) {
 	struct sockaddr_in addr;
 	socklen_t len;
 	int fd;
+	int i;
 
 	assert(res != NULL);
 
-    // New client connection
-    len = sizeof(addr);
-    fd = accept(res->listen, (struct sockaddr*)&addr, &len);
-    for (int i = 0; i <= FD_SETSIZE; i++) {
+	// New client connection
+	len = sizeof(addr);
+	fd = accept(res->listen, (struct sockaddr*)&addr, &len);
+	for (i = 0; i <= FD_SETSIZE; i++) {
 		if (i == MAX_CLIENTS) {
 			perror("Client limit reached");
 			close(fd); // Drop the client

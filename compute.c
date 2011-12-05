@@ -2,7 +2,7 @@
  * @file compute.c
  * @author Dan Albert
  * @date Created 11/05/2011
- * @date Last updated 12/04/2011
+ * @date Last updated 12/05/2011
  * @version 1.0
  *
  * @section LICENSE
@@ -41,14 +41,29 @@
 #include "shmem.h"
 #include "sock.h"
 
-/// The maximum number of divisors to store
-#define MAX_DIVISORS 10000
+/// Minimum number of arguments this program needs to run
+#define ARGC_MIN 2
 
 /// Number of arguments to be supplied for pipe method
 #define PIPE_ARGC 4
 
 /// Number of arguments required for sockets method
 #define SOCK_ARGC 3
+
+/// Index of mode argument in argv
+#define MODE_ARG 1
+
+/// Index of start argument in argv
+#define START_ARG 2
+
+/// Index of end argument in argv
+#define END_ARG 3
+
+/// Index of address argument in argv
+#define ADDR_ARG 2
+
+/// The maximum number of divisors to store
+#define MAX_DIVISORS 10000
 
 /**
  * @brief Checks if an integer is a perfect number.
@@ -143,7 +158,7 @@ void pipe_cleanup(void);
  *
  * Preconditions: Proper arguments have been supplied to the program
  *
- * Postconditions: Socket resources have been intialized and connected
+ * Postconditions: Socket resources have been initialized and connected
  *
  * @param argc Number of arguments supplied to program
  * @param argv List of arguments supplied to the program
@@ -232,7 +247,7 @@ int main(int argc, char **argv) {
 	int start;
 	int end;
 	
-	if (argc < 2) {
+	if (argc < ARGC_MIN) {
 		usage();
 	}
 
@@ -256,7 +271,7 @@ int main(int argc, char **argv) {
 		perror("Could not set SIGPIPE handler");
 	}
 
-	mode = argv[1][0]; // The first character is the mode
+	mode = argv[MODE_ARG][0]; // The first character is the mode
 
 	switch (mode) {
 	case 'm':
@@ -269,8 +284,8 @@ int main(int argc, char **argv) {
 		if (argc < PIPE_ARGC) {
 			usage();
 		}
-		start = atoi(argv[2]);
-		end = atoi(argv[3]);
+		start = atoi(argv[START_ARG]);
+		end = atoi(argv[END_ARG]);
 		pipe_loop(start, end);
 		break;
 	case 's':
@@ -293,15 +308,16 @@ bool is_perfect_number(unsigned int n) {
 	unsigned int divisors[MAX_DIVISORS];
 	unsigned int n_divisors = 0;
 	unsigned int sum = 0;
+	unsigned int i;
 
-	for (unsigned int i = 1; i < n; i++) {
+	for (i = 1; i < n; i++) {
 		if ((n % i) == 0) {
 			// Is a divisor
 			divisors[n_divisors++] = i;
 		}
 	}
 
-	for (unsigned int i = 0; i < n_divisors; i++) {
+	for (i = 0; i < n_divisors; i++) {
 		sum += divisors[i];
 	}
 
@@ -310,14 +326,16 @@ bool is_perfect_number(unsigned int n) {
 
 int next_test(struct shmem_res *res) {
 	int test;
+	uint8_t *addr;
+	int i;
 
 	assert(res != NULL);
 
 	// Loop over each byte in the bitmap
 	// Will actually test until the end of the byte if manage was given a limit
 	// that was not a power of two
-	for (uint8_t *addr = res->bitmap; addr < (uint8_t *)res->perfect_numbers; addr++) {
-		for (int i = 0; i < 8; i++) {
+	for (addr = res->bitmap; addr < (uint8_t *)res->perfect_numbers; addr++) {
+		for (i = 0; i < 8; i++) {
 			if (BIT(*addr, i) == 0) {
 
 				while (sem_wait(res->bitmap_sem) != 0) {
@@ -380,6 +398,7 @@ void shmem_loop(struct shmem_res *res) {
 		return;
 	}
 
+	// Claim a new number until all have been tested
 	test = next_test(res);
 	while (test != -1) {
 		if (is_perfect_number(test) == true) {
@@ -404,6 +423,8 @@ void shmem_loop(struct shmem_res *res) {
 }
 
 bool shmem_report(struct shmem_res *res, int n) {
+	int i;
+
 	assert(res != NULL);
 
 	while (sem_wait(res->perfect_numbers_sem) != 0) {
@@ -415,7 +436,7 @@ bool shmem_report(struct shmem_res *res, int n) {
 		// Else we received EAGAIN or EINTR and should wait again
 	}
 
-	for (int i = 0; i < NPERFNUMS; i++) {
+	for (i = 0; i < NPERFNUMS; i++) {
 		if (res->perfect_numbers[i] == 0) {
 			// Open slot, use it
 			res->perfect_numbers[i] = n;
@@ -434,11 +455,12 @@ bool shmem_report(struct shmem_res *res, int n) {
 
 void pipe_loop(int start, int end) {
 	union packet p;
+	int i;
 
 	assert(start > 0);
 	assert(end > start);
 
-	for (int i = start; i <= end; i++) {
+	for (i = start; i <= end; i++) {
 		// Check to see if a signal was caught
 		if (exit_status != EXIT_SUCCESS) {
 			p.id = PACKETID_CLOSED;
@@ -480,7 +502,7 @@ int sock_init(int argc, char **argv) {
 		return -1;
 	}
 
-	fd = sock_connect(argv[2]);
+	fd = sock_connect(argv[ADDR_ARG]);
 	if (fd == -1) {
 		return -1;
 	}
@@ -491,6 +513,7 @@ int sock_init(int argc, char **argv) {
 void sock_loop(int fd) {
 	union packet p;
 	bool done = false;
+	int i;
 
 	while (done == false) {
 		// Check to see if a signal was caught
@@ -513,7 +536,7 @@ void sock_loop(int fd) {
 			done = true;
 			break;
 		case PACKETID_RANGE:
-			for (int i = p.range.start; i <= p.range.end; i++) {
+			for (i = p.range.start; i <= p.range.end; i++) {
 				// Check to see if a signal was caught
 				if (exit_status != EXIT_SUCCESS) {
 					fputs("\r", stderr);
