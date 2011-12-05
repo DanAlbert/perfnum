@@ -86,6 +86,19 @@ void usage(void);
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
 
+/**
+ * @brief Entry point for the program
+ *
+ * Parses arguments for program mode and responds appropriately.
+ *
+ * Preconditions: Proper arguments have been supplied
+ *
+ * Postconditions:
+ *
+ * @param argc Number of arguments supplied
+ * @param argv List of arguments supplied
+ * @return Exit status
+ */
 int main(int argc, char **argv) {
 	struct sigaction sigact;
 	struct shmem_res res;

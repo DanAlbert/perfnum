@@ -60,11 +60,60 @@
  */
 bool is_perfect_number(unsigned int n);
 
+/**
+ * @brief Funds and claims a number for testing
+ *
+ * Scans through shared memory object for an untested number and claims it.
+ *
+ * Preconditions: res is not NULL, shared memory initialized
+ *
+ * Postconditions: A number has been selected or all numbers have been tested
+ *
+ * @param res Pointer to shared memory resource structure
+ * @return Number to test or -1 if all numbers have been tested
+ */
 int next_test(struct shmem_res *res);
 
+/**
+ * @brief Main loop for shared memory
+ *
+ * Places process in list, then loops, finding numbers to test and reporting
+ * them, removing the process from the list upon completion.
+ *
+ * Preconditions: res is not NULL, shared memory is initialized, there is room
+ * in the process list for another process
+ *
+ * Postconditions: The process has been removed from the process list
+ *
+ * @param res Pointer to shared memory resource structure
+ */
 void shmem_loop(struct shmem_res *res);
+
+/**
+ * @brief Reports perfect number to shared memory object
+ *
+ * Preconditions: res is not NULL, shared memory is initialized, n is positive,
+ * there is room for another number in the list
+ *
+ * Postconditions: The number has been placed in the perfect numbers list
+ *
+ * @param res Pointer to shared memory resource structure
+ * @param n Number to report
+ * @return true on success, false otherwise
+ */
 bool shmem_report(struct shmem_res *res, int n);
 
+/**
+ * @brief Checks each number in assigned range, reporting when appropriate
+ *
+ * Preconditions: start is positive, end is greater than start
+ *
+ * Postconditions: Each number in the range has been tested and reported as
+ * necessary
+ *
+ * @param start First number to test
+ * @param end Last number to test
+ */
 void pipe_loop(int start, int end);
 
 /**
@@ -77,11 +126,64 @@ void pipe_loop(int start, int end);
  * @param n Number to report
  */
 void pipe_report(int n);
+
+/**
+ * @brief Cleans up pipe resources
+ *
+ * Preconditions:
+ *
+ * Postconditions: Pipe resources have been released
+ */
 void pipe_cleanup(void);
 
+/**
+ * @brief Initializes socket resources
+ *
+ * Preconditions: Proper arguments have been supplied to the program
+ *
+ * Postconditions: Socket resources have been intialized and connected
+ *
+ * @param argc Number of arguments supplied to program
+ * @param argv List of arguments supplied to the program
+ * @return Socket file descriptor or -1 on error
+ */
 int sock_init(int argc, char **argv);
+
+/**
+ * @brief Checks for perfect numbers
+ *
+ * Checks assigned range for perfect numbers, requesting a new range as
+ * necessary.
+ *
+ * Preconditions: Sockets have been initialized
+ *
+ * Postconditions:
+ *
+ * @param fd Socket file descriptor
+ */
 void sock_loop(int fd);
+
+/**
+ * @brief Reports a perfect number to the managing server
+ *
+ * Preconditions: Sockets have been initialized
+ *
+ * Postconditions: The number has been sent to the managing server
+ *
+ * @param fd Socket file descriptor
+ * @param n Number to report
+ */
 void sock_report(int fd, int n);
+
+/**
+ * @brief Cleans up socket resources
+ *
+ * Preconditions:
+ *
+ * Postconditions: Socket resources have been released
+ *
+ * @param fd Socket file descriptor
+ */
 void sock_cleanup(int fd);
 
 /**
@@ -95,9 +197,31 @@ void sock_cleanup(int fd);
  */
 void handle_signal(int sig);
 
+/**
+ * @brief Displays usage information and exits
+ *
+ * Preconditions:
+ *
+ * Postconditions:
+ */
+void usage(void) {
+
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
 
+/**
+ * @brief Entry point for the program
+ *
+ * Parses arguments for program mode and responds appropriately.
+ *
+ * Preconditions: Proper arguments have been supplied
+ *
+ * Postconditions:
+ *
+ * @param argc Number of arguments supplied
+ * @param argv List of arguments supplied
+ * @return Exit status
+ */
 int main(int argc, char **argv) {
 	struct shmem_res res;
 	struct sigaction sigact;
@@ -188,8 +312,8 @@ int next_test(struct shmem_res *res) {
 	assert(res != NULL);
 
 	// Loop over each byte in the bitmap
-	// Will actually test until the end of the byte if manage was given a limit that was
-	// not a power of two
+	// Will actually test until the end of the byte if manage was given a limit
+	// that was not a power of two
 	for (uint8_t *addr = res->bitmap; addr < res->perfect_numbers; addr++) {
 		for (int i = 0; i < 8; i++) {
 			if (BIT(*addr, i) == 0) {
@@ -203,8 +327,8 @@ int next_test(struct shmem_res *res) {
 					// Else we received EAGAIN or EINTR and should wait again
 				}
 
-				// Check to make sure the process that had the semaphore locked didn't
-				// claim this number
+				// Check to make sure the process that had the semaphore
+				// locked didn't claim this number
 				if (BIT(*addr, i) == 0) {
 					// Claim this number for testing
 					SET_BIT(*addr, i);
