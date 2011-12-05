@@ -370,6 +370,8 @@ bool check_kill(int argc, char **argv) {
 int pipe_init(pid_t *manage) {
 	int fd;
 
+	assert(manage != NULL);
+
 	*manage = load_pid_file(PID_FILE);
 	if (*manage == -1) {
 		perror("Could not load pid file");
@@ -511,6 +513,8 @@ void shmem_report(struct shmem_res *res) {
 }
 
 bool shmem_kill(struct shmem_res *res) {
+	assert(res != NULL);
+
 	if (kill(*res->manage, SIGQUIT) == -1) {
 		perror("Could not kill manage");
 		return false;

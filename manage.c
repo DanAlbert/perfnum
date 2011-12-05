@@ -1054,6 +1054,8 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs) {
 void collect_computes(struct pipe_res *res) {
 	int i;
 
+	assert(res != NULL);
+
 	// Kill any other computes
 	for (i = 0; i < res->nprocs; i++) {
 		if (res->compute_pids[i] != -1) {

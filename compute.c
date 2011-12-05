@@ -287,6 +287,7 @@ int main(int argc, char **argv) {
 		start = atoi(argv[START_ARG]);
 		end = atoi(argv[END_ARG]);
 		pipe_loop(start, end);
+		pipe_cleanup();
 		break;
 	case 's':
 		fd = sock_init(argc, argv);
@@ -426,6 +427,7 @@ bool shmem_report(struct shmem_res *res, int n) {
 	int i;
 
 	assert(res != NULL);
+	assert(n > 0);
 
 	while (sem_wait(res->perfect_numbers_sem) != 0) {
 		if ((errno == EDEADLK) || (errno == EINVAL)) {

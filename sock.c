@@ -36,6 +36,8 @@ int sock_connect(char *host) {
 	struct sockaddr_in addr;
 	int fd;
 
+	assert(host != NULL);
+
 	fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd == -1) {
 		perror("Unable to create socket");
