@@ -21,6 +21,7 @@
 /// Client "pid" for closed packets in socket mode
 #define PID_CLIENT ((pid_t)1)
 
+
 /**
  * Packet identifier constants
  */
@@ -36,6 +37,7 @@ enum packet_id {
 	PACKETID_REFUSE
 };
 
+
 /**
  * 'done' packet payload
  */
@@ -44,6 +46,7 @@ struct packet_done {
 	pid_t pid;					///< Process ID of the sending process
 };
 
+
 /**
  * 'closed' packet payload
  */
@@ -51,6 +54,7 @@ struct packet_closed {
 	enum packet_id packet_id;	///< Packet identifier
 	pid_t pid;					///< Process ID of the sending process
 };
+
 
 /**
  * 'range' packet payload
@@ -61,6 +65,7 @@ struct packet_range {
 	int end;					///< End of assigned range
 };
 
+
 /**
  * 'perfnum' packet payload
  */
@@ -68,6 +73,7 @@ struct packet_perfnum {
 	enum packet_id packet_id;	///< Packet identifier
 	int perfnum;				///< Perfect number
 };
+
 
 /**
  * General packet type. Ensures that sent packets always have the same size.
@@ -79,6 +85,7 @@ union packet {
 	struct packet_range range;
 	struct packet_perfnum perfnum;
 };
+
 
 /**
  * @brief Read a packet from a stream, blocking until one is received
@@ -92,6 +99,7 @@ union packet {
  * @return -1 on error, 0 otherwise
  */
 int get_packet(int fd, union packet *p);
+
 
 /**
  * @brief Write a packet to a stream

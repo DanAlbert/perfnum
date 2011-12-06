@@ -52,6 +52,7 @@
 /// Maximum size of the PID string
 #define SPIDSTR 11
 
+
 /**
  * @brief Checks command line arguments for kill option
  *
@@ -65,6 +66,7 @@
  */
 bool check_kill(int argc, char **argv);
 
+
 /**
  * @brief Initializes pipe resources
  *
@@ -76,6 +78,7 @@ bool check_kill(int argc, char **argv);
  * @return FIFO file descriptor or -1 on error
  */
 int pipe_init(pid_t *manage);
+
 
 /**
  * @brief Responds to and reports messages from managign process
@@ -89,6 +92,7 @@ int pipe_init(pid_t *manage);
  */
 void pipe_report(int fd, pid_t manage);
 
+
 /**
  * @brief Cleans up pipe resources
  *
@@ -100,6 +104,7 @@ void pipe_report(int fd, pid_t manage);
  */
 void pipe_cleanup(int fd);
 
+
 /**
  * @brief Signals managing process to shut down computation
  *
@@ -110,6 +115,7 @@ void pipe_cleanup(int fd);
  * @return true on success, false otherwise
  */
 bool pipe_kill(void);
+
 
 /**
  * @brief Loads a PID from a file
@@ -124,6 +130,7 @@ bool pipe_kill(void);
  */
 int load_pid_file(char *path);
 
+
 /**
  * @brief Reports perfect numbers and computation statistics
  *
@@ -135,6 +142,7 @@ int load_pid_file(char *path);
  */
 void shmem_report(struct shmem_res *res);
 
+
 /**
  * @brief Signals managing process to shut down computation
  *
@@ -145,6 +153,7 @@ void shmem_report(struct shmem_res *res);
  * @return true on success, false otherwise
  */
 bool shmem_kill(struct shmem_res *res);
+
 
 /**
  * @brief Initializes and connects socket resources
@@ -160,6 +169,7 @@ bool shmem_kill(struct shmem_res *res);
  */
 int sock_init(int argc, char **argv);
 
+
 /**
  * @brief Reports received information from server
  *
@@ -171,6 +181,7 @@ int sock_init(int argc, char **argv);
  */
 void sock_report(int fd);
 
+
 /**
  * @brief Cleans up socket resources
  *
@@ -181,6 +192,7 @@ void sock_report(int fd);
  * @param fd Socket file descriptor
  */
 void sock_cleanup(int fd);
+
 
 /**
  * @brief Signals managing server to shut down computation
@@ -194,6 +206,7 @@ void sock_cleanup(int fd);
  */
 bool sock_kill(int fd);
 
+
 /**
  * @brief Finds the next untested number
  *
@@ -206,6 +219,7 @@ bool sock_kill(int fd);
  */
 int next_test(struct shmem_res *res);
 
+
 /**
  * @brief Exits the program cleanly.
  *
@@ -217,6 +231,7 @@ int next_test(struct shmem_res *res);
  */
 void handle_signal(int sig);
 
+
 /**
  * @brief Displays usage information and exits
  *
@@ -226,8 +241,10 @@ void handle_signal(int sig);
  */
 void usage(void);
 
+
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
+
 
 /**
  * @brief Entry point for the program

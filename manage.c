@@ -89,6 +89,7 @@
 /// Index of the read end of a pipe
 #define WRITE 1
 
+
 /**
  * Contains resources used by pipe mode
  */
@@ -101,6 +102,7 @@ struct pipe_res {
 	int nprocs;					///< Number of compute processes spawned
 	int limit;					///< Highest number to test
 };
+
 
 /**
  * Contains resources used by socket mode
@@ -120,6 +122,7 @@ struct sock_res {
 	bool missed_some;			///< Flag to mark if a process terminated prematurely
 };
 
+
 /**
  * @brief Initializes pipe resources
  *
@@ -133,6 +136,7 @@ struct sock_res {
  * @return true on success, false otherwise
  */
 bool pipe_init(int argc, char **argv, struct pipe_res *res);
+
 
 /**
  * @brief Reports perfect numbers found
@@ -148,6 +152,7 @@ bool pipe_init(int argc, char **argv, struct pipe_res *res);
  */
 void pipe_report(struct pipe_res *res);
 
+
 /**
  * @brief Cleans up pipe resources
  *
@@ -158,6 +163,7 @@ void pipe_report(struct pipe_res *res);
  * @param res Pointer to pipe resource structure
  */
 void pipe_cleanup(struct pipe_res *res);
+
 
 /**
  * @brief Initializes shared memory resources
@@ -173,6 +179,7 @@ void pipe_cleanup(struct pipe_res *res);
  */
 bool shmem_init(int argc, char **argv, struct shmem_res *res);
 
+
 /**
  * @brief Cleans up shared memory resources
  *
@@ -183,6 +190,7 @@ bool shmem_init(int argc, char **argv, struct shmem_res *res);
  * @param res Pointer to shared memory resource structure
  */
 void shmem_cleanup(struct shmem_res *res);
+
 
 /**
  * @brief Initializes socket resources
@@ -200,6 +208,7 @@ void shmem_cleanup(struct shmem_res *res);
  */
 bool sock_init(int argc, char **argv, struct sock_res *res);
 
+
 /**
  * @brief Reports perfect numbers found
  *
@@ -214,6 +223,7 @@ bool sock_init(int argc, char **argv, struct sock_res *res);
  */
 void sock_report(struct sock_res *res);
 
+
 /**
  * @brief Cleans up socket resources
  *
@@ -224,6 +234,7 @@ void sock_report(struct sock_res *res);
  * @res Pointer to socket esource structure
  */
 void sock_cleanup(struct sock_res *res);
+
 
 /**
  * @brief Identifies packet type and takes appropriate action
@@ -239,6 +250,7 @@ void sock_cleanup(struct sock_res *res);
  * @return true if the packet signaled shit down, false otherwise
  */
 bool sock_handle_packet(int fd, struct sock_res *res, union packet *p);
+
 
 /**
  * @brief Spawns compute processes for the pipes method
@@ -258,6 +270,7 @@ bool sock_handle_packet(int fd, struct sock_res *res, union packet *p);
  */
 int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
 
+
 /**
  * @brief Kills and reaps any remaining compute processes
  *
@@ -268,6 +281,7 @@ int spawn_computes(pid_t **pids, int fds[2], int limit, int nprocs);
  * @param res Pointer to pipe resource structure
  */
 void collect_computes(struct pipe_res *res);
+
 
 /**
  * @brief Creates and initializes the shared memory object and resource
@@ -287,6 +301,7 @@ void collect_computes(struct pipe_res *res);
  */
 void *shmem_mount(char *path, int object_size);
 
+
 /**
  * @brief Accepts a new TCP connection if there is room for more clients
  *
@@ -301,6 +316,7 @@ void *shmem_mount(char *path, int object_size);
  */
 void accept_client(struct sock_res *res);
 
+
 /**
  * @brief Displays usage information and exits
  *
@@ -309,6 +325,7 @@ void accept_client(struct sock_res *res);
  * Postconditions:
  */
 void usage(void);
+
 
 /**
  * @brief Handles signal and sets exit flag
@@ -321,8 +338,10 @@ void usage(void);
  */
 void handle_signal(int sig);
 
+
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
+
 
 /**
  * @brief Entry point for the program

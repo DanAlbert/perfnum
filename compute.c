@@ -48,6 +48,7 @@
 /// The maximum number of divisors to store
 #define MAX_DIVISORS 10000
 
+
 /**
  * @brief Checks if an integer is a perfect number.
  *
@@ -59,6 +60,7 @@
  * @return true if n is a perfect number, false otherwise
  */
 bool is_perfect_number(unsigned int n);
+
 
 /**
  * @brief Funds and claims a number for testing
@@ -73,6 +75,7 @@ bool is_perfect_number(unsigned int n);
  * @return Number to test or -1 if all numbers have been tested
  */
 int next_test(struct shmem_res *res);
+
 
 /**
  * @brief Main loop for shared memory
@@ -89,6 +92,7 @@ int next_test(struct shmem_res *res);
  */
 void shmem_loop(struct shmem_res *res);
 
+
 /**
  * @brief Reports perfect number to shared memory object
  *
@@ -103,6 +107,7 @@ void shmem_loop(struct shmem_res *res);
  */
 bool shmem_report(struct shmem_res *res, int n);
 
+
 /**
  * @brief Checks each number in assigned range, reporting when appropriate
  *
@@ -116,6 +121,7 @@ bool shmem_report(struct shmem_res *res, int n);
  */
 void pipe_loop(int start, int end);
 
+
 /**
  * @brief Reports perfect numbers over pipes.
  *
@@ -127,6 +133,7 @@ void pipe_loop(int start, int end);
  */
 void pipe_report(int n);
 
+
 /**
  * @brief Cleans up pipe resources
  *
@@ -135,6 +142,7 @@ void pipe_report(int n);
  * Postconditions: Pipe resources have been released
  */
 void pipe_cleanup(void);
+
 
 /**
  * @brief Initializes socket resources
@@ -148,6 +156,7 @@ void pipe_cleanup(void);
  * @return Socket file descriptor or -1 on error
  */
 int sock_init(int argc, char **argv);
+
 
 /**
  * @brief Checks for perfect numbers
@@ -163,6 +172,7 @@ int sock_init(int argc, char **argv);
  */
 void sock_loop(int fd);
 
+
 /**
  * @brief Reports a perfect number to the managing server
  *
@@ -175,6 +185,7 @@ void sock_loop(int fd);
  */
 void sock_report(int fd, int n);
 
+
 /**
  * @brief Cleans up socket resources
  *
@@ -185,6 +196,7 @@ void sock_report(int fd, int n);
  * @param fd Socket file descriptor
  */
 void sock_cleanup(int fd);
+
 
 /**
  * @brief Exits the program cleanly.
@@ -197,6 +209,7 @@ void sock_cleanup(int fd);
  */
 void handle_signal(int sig);
 
+
 /**
  * @brief Displays usage information and exits
  *
@@ -208,6 +221,7 @@ void usage(void);
 
 /// Global variable to record caught signal so main loop can exit cleanly
 volatile sig_atomic_t exit_status = EXIT_SUCCESS;
+
 
 /**
  * @brief Entry point for the program

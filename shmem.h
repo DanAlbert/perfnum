@@ -36,6 +36,7 @@
 /// Maximum number of processes to track in shared memory
 #define NPROCS 20
 
+
 /**
  * Process data structure
  */
@@ -44,6 +45,7 @@ struct process {
 	int found;	///< Number of perfect numbers found
 	int tested;	///< Number of numbers tested
 };
+
 
 /**
  * Shared memory layout structure
@@ -59,6 +61,7 @@ struct shmem_res {
 	struct process *processes;	///< Address of the beginning of the process list
 	void *end;					///< Address of the end of the shared memory object
 };
+
 
 /**
  * @brief Opens and mmaps shared memory object
